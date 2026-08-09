@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>FOURLENS · Multi-Master Value Research</title>
+<title>AI BERKSHIRE · Four-Master Value Research</title>
 <style>
   :root{
     --ink:#111111; --paper:#fafafa; --line:#111; --muted:#666;
@@ -113,14 +113,14 @@
   <header>
     <div class="topbar">
       <div>
-        <div class="brand">FOURLENS</div>
+        <div class="brand">AI BERKSHIRE</div>
         <div class="tagline">One ticker. Four value-investing legends. Zero noise. Buffett · Munger · Klarman · Marks — adversarial multi-agent research.</div>
       </div>
       <span id="auth"></span>
     </div>
     <div class="inputrow">
       <input type="text" id="ticker" placeholder="Enter a ticker, e.g. AAPL / BRK.B / NVDA" />
-      <button id="go">Run Four-Lens Analysis</button>
+      <button id="go">Run AI Berkshire Analysis</button>
     </div>
     <div class="hint">Tip: US stocks use the native symbol (BRK.B auto-maps to BRK-B for quotes). Data from public feeds; analysis is methodology, not advice. Log in to sync your portfolio across devices.</div>
     <div class="watch" id="watch">
@@ -160,7 +160,7 @@
       <div class="plan">
         <div class="t">Team</div>
         <div class="p">$49<small> / mo</small></div>
-        <ul><li>Everything in Pro</li><li>5 seats</li><li>API access</li><li>Custom lenses</li></ul>
+        <ul><li>Everything in Pro</li><li>5 seats</li><li>API access <em>(coming soon)</em></li><li>Custom lenses <em>(coming soon)</em></li></ul>
         <button data-plan="team">Subscribe Team</button>
       </div>
     </div>
@@ -170,13 +170,14 @@
         <input type="email" id="act-email" placeholder="your-paypal@email.com" style="padding:10px 12px;font-size:15px;border:2px solid var(--line);font-family:inherit;min-width:240px" />
         <button id="act-btn">Activate</button>
       </div>
-      <div class="hint">We cross-check against PayPal records, then your plan unlocks. Single payment per cycle (&lt;$1,000).</div>
+      <div class="hint">Activation is instant; our team manually verifies your PayPal payment afterward. Single payment per cycle (&lt;$1,000).</div>
     </div>
   </section>
 
   <footer>
-    Disclaimer: FOURLENS output is a demonstration of investment methodology and a research framework — not investment advice or a solicitation. Investing involves risk; do your own research and decisions.
-    <br/>FourLens · Multi-Master Value Research · Powered by Alibaba DashScope (Qwen).
+    Disclaimer: AI BERKSHIRE output is a demonstration of investment methodology and a research framework — not investment advice or a solicitation. Investing involves risk; do your own research and decisions.
+    <br/>AI BERKSHIRE is an independent research tool and is not affiliated with, endorsed by, or connected to Berkshire Hathaway Inc.
+    <br/>AI BERKSHIRE · Four-Master Value Research · Powered by Alibaba DashScope (Qwen).
   </footer>
 </div>
 
@@ -205,8 +206,8 @@ const MASTER_ROLE = {
   marks:"Cycles · Psychology · Contrarian Timing"
 };
 const $ = (s)=>document.querySelector(s);
-const LS_WATCH = "fourlens_watchlist";
-const LS_TOKEN = "fourlens_token";
+const LS_WATCH = "aiberkshire_watchlist";
+const LS_TOKEN = "aiberkshire_token";
 
 let TOKEN = localStorage.getItem(LS_TOKEN) || "";
 let ME = null;

@@ -1,9 +1,9 @@
 {
-  "name": "fourlens-value-research",
+  "name": "ai-berkshire-saas",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "FourLens — Multi-Master Value Investment Research SaaS (Buffett / Munger / Klarman / Marks)",
+  "description": "AI Berkshire — Four-Master Value Investment Research SaaS (Buffett / Munger / Klarman / Marks)",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"

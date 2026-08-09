@@ -144,7 +144,7 @@ app.post("/api/analyze", async (req, res) => {
 const PAYPAL_EMAIL = (process.env.PAYPAL_EMAIL || "").trim();
 const PAYPAL_BASE = (process.env.PAYPAL_PAYMENT_URL || "").replace(/\/$/, "");
 const PLAN_PRICE = { pro: 19, team: 49 };
-const PLAN_NAME = { pro: "FourLens Pro", team: "FourLens Team" };
+const PLAN_NAME = { pro: "AI Berkshire Pro", team: "AI Berkshire Team" };
 app.post("/api/checkout", (req, res) => {
   const u = getUserFromReq(req);
   if (!u) return res.status(401).json({ error: "not authenticated" });
@@ -236,5 +236,5 @@ app.delete("/api/portfolio", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`FourLens running at http://localhost:${PORT}`);
+  console.log(`AI Berkshire running at http://localhost:${PORT}`);
 });

@@ -1,4 +1,4 @@
-// FourLens — 四位价值投资大师的分析「镜头」
+// AI Berkshire — 四位价值投资大师的分析「镜头」
 // 每位大师的 system prompt 编码其投资哲学与结构化输出格式。
 // 四视角刻意互不重叠：巴芒=复利多头，Klarman=下行 skeptic，Marks=周期/情绪判官。
 
