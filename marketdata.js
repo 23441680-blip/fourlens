@@ -52,6 +52,32 @@ async function yahooFetch(sym) {
   return null;
 }
 
+// ---------- Yahoo v7 quote（补齐估值字段：PE / 市值 / 股息率 / Beta） ----------
+// chart meta 经常缺失 trailingPE 等估值字段，v7/quote 稳定返回这些指标
+async function yahooQuote(sym) {
+  for (const host of YAHOO_HOSTS) {
+    try {
+      const r = await fetch(`https://${host}/v7/finance/quote?symbols=${encodeURIComponent(sym)}`, {
+        headers: { "User-Agent": UA },
+      });
+      if (!r.ok) continue;
+      const d = await r.json();
+      const q = d?.quoteResponse?.result?.[0];
+      if (!q) continue;
+      const out = {};
+      if (q.trailingPe != null) out.trailingPE = String(q.trailingPe);
+      if (q.forwardPe != null) out.forwardPE = String(q.forwardPe);
+      if (q.marketCap != null) out.marketCap = fmtCap(q.marketCap);
+      if (q.dividendYield != null) out.dividendYield = `${Number(q.dividendYield).toFixed(2)}%`;
+      if (q.beta != null) out.beta = String(q.beta);
+      return out;
+    } catch {
+      /* try next host */
+    }
+  }
+  return null;
+}
+
 // ---------- Finnhub（可选增强） ----------
 export function mapFinnhub(ticker, { quote, profile, metric }) {
   const out = { symbol: ticker, source: "finnhub", price: null, currency: null, previousClose: null, stats: {}, profile: {} };
@@ -99,6 +125,76 @@ async function finnhubFetch(sym, key) {
   return null;
 }
 
+// ---------- 名称 / 中文 → 股票代码 解析（零 key） ----------
+// 常见中英别名表：保证「苹果」等一定能映射到代码，即便 Yahoo 搜索接口波动
+const NAME_ALIASES = {
+  "苹果": "AAPL", "apple": "AAPL",
+  "英伟达": "NVDA", "nvidia": "NVDA",
+  "特斯拉": "TSLA", "tesla": "TSLA",
+  "微软": "MSFT", "microsoft": "MSFT",
+  "谷歌": "GOOGL", "google": "GOOGL", "alphabet": "GOOGL",
+  "亚马逊": "AMZN", "amazon": "AMZN",
+  "脸书": "META", "meta": "META", "facebook": "META",
+  "伯克希尔": "BRK-B", "berkshire": "BRK-B", "波克夏": "BRK-B",
+  "腾讯": "0700.HK", "tencent": "0700.HK",
+  "阿里巴巴": "BABA", "alibaba": "BABA",
+  "百度": "BIDU", "baidu": "BIDU",
+  "京东": "JD", "jd": "JD", "jingdong": "JD",
+  "拼多多": "PDD", "pdd": "PDD",
+  "可口可乐": "KO", "coca": "KO", "cocacola": "KO",
+  "耐克": "NKE", "nike": "NKE",
+  "星巴克": "SBUX", "starbucks": "SBUX",
+  "维萨": "V", "visa": "V",
+  "摩根大通": "JPM", "jpmorgan": "JPM", "jp Morgan": "JPM",
+  "强生": "JNJ", "johnson": "JNJ",
+  "宝洁": "PG", "pg": "PG", "procter": "PG",
+  "沃尔玛": "WMT", "walmart": "WMT",
+  "英特尔": "INTC", "intel": "INTC",
+  "AMD": "AMD", "超威": "AMD",
+  "高通": "QCOM", "qualcomm": "QCOM",
+  "Netflix": "NFLX", "网飞": "NFLX",
+  "Adobe": "ADBE",
+  "Salesforce": "CRM",
+  "甲骨文": "ORCL", "oracle": "ORCL",
+  "可口可乐": "KO",
+  "茅台": "600519.SS", "贵州茅台": "600519.SS",
+  "比亚迪": "1211.HK", "bydd": "1211.HK", "byd": "1211.HK",
+  "美团": "3690.HK", "meituan": "3690.HK",
+  "小米": "1810.HK", "xiaomi": "1810.HK",
+  "快手": "1024.HK", "kuaishou": "1024.HK",
+};
+
+function isTicker(s) {
+  return /^[A-Z][A-Z0-9.\-]{0,9}$/.test(s);
+}
+
+// 把任意输入（代码 / 中文名 / 英文名）解析为标准代码；解析失败返回 null
+export async function resolveSymbol(query) {
+  const q = (query || "").trim();
+  if (!q) return null;
+  const up = q.toUpperCase();
+  if (isTicker(up)) return up;
+  const key = q.toLowerCase();
+  if (NAME_ALIASES[key]) return NAME_ALIASES[key];
+  // 兜底：Yahoo 搜索（中文/英文公司名 → 代码）
+  for (const host of YAHOO_HOSTS) {
+    try {
+      const r = await fetch(`https://${host}/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0`, {
+        headers: { "User-Agent": UA },
+      });
+      if (!r.ok) continue;
+      const d = await r.json();
+      const quotes = (d && d.quotes) || [];
+      const eq = quotes.find((x) => x.symbol && (x.quoteType === "EQUITY" || !x.quoteType || x.isYahooFinance));
+      const sym = (eq || quotes[0])?.symbol;
+      if (sym) return String(sym).toUpperCase();
+    } catch {
+      /* try next host */
+    }
+  }
+  return null;
+}
+
 // ---------- 统一入口 ----------
 export function makeMarketDataFetcher(env = process.env) {
   const fhKey = (env.FINNHUB_API_KEY || "").trim();
@@ -111,9 +207,16 @@ export function makeMarketDataFetcher(env = process.env) {
       const f = await finnhubFetch(sym, fhKey);
       if (f && f.price != null) return f;
     }
-    // 2) 零 key 主源：Yahoo chart meta
+    // 2) 零 key 主源：Yahoo chart meta（价格 + 52周）
     const meta = await yahooFetch(sym);
-    if (meta) return mapYahooMeta(ticker, meta);
+    if (meta) {
+      const base = mapYahooMeta(ticker, meta);
+      // 2b) 用 v7/quote 补齐估值字段（PE/市值/股息率/Beta），chart meta 常缺失
+      const q = await yahooQuote(sym);
+      if (q) Object.assign(base.stats, q);
+      base.source = "yahoo";
+      return base;
+    }
     // 3) 兜底：模型知识
     return empty;
   };

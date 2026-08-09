@@ -2,7 +2,7 @@ import express from "express";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { MASTERS, SYNTH_PROMPT } from "./prompts.js";
-import { makeMarketDataFetcher } from "./marketdata.js";
+import { makeMarketDataFetcher, resolveSymbol } from "./marketdata.js";
 import { auth, portfolio, billing } from "./db.js";
 
 // 零依赖加载 .env（Node 不自动加载，这里手写；已存在的环境变量不被覆盖）
@@ -113,10 +113,16 @@ async function synthesize(ticker, analyses) {
 
 // ---------- 路由 ----------
 app.post("/api/analyze", async (req, res) => {
-  const ticker = (req.body?.ticker || "").trim().toUpperCase();
-  if (!ticker) return res.status(400).json({ error: "ticker required" });
-  if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(ticker)) return res.status(400).json({ error: "invalid ticker" });
+  const rawInput = (req.body?.ticker || "").trim();
+  if (!rawInput) return res.status(400).json({ error: "ticker required" });
   if (!API_KEY) return res.status(500).json({ error: "DASHSCOPE_API_KEY not set" });
+
+  // 名称 / 中文 → 代码（零 key：别名表 + Yahoo 搜索兜底）
+  const resolved = await resolveSymbol(rawInput);
+  if (!resolved) {
+    return res.status(400).json({ error: "无法识别该名称，请尝试输入股票代码（如 AAPL / BRK.B）" });
+  }
+  const ticker = resolved;
 
   const key = `${ticker}:${MODEL}`;
   const hit = analysisCache.get(key);
@@ -129,7 +135,7 @@ app.post("/api/analyze", async (req, res) => {
     const marketText = marketContextText(market);
     const analyses = await Promise.all(MASTERS.map((m) => callMaster(m, ticker, marketText)));
     const synthesized = await synthesize(ticker, analyses);
-    const data = { ticker, marketData: market, analyses, synthesized };
+    const data = { ticker, query: rawInput, marketData: market, analyses, synthesized };
     analysisCache.set(key, { ts: Date.now(), data });
     res.json(data);
   } catch (e) {

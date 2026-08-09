@@ -119,10 +119,10 @@
       <span id="auth"></span>
     </div>
     <div class="inputrow">
-      <input type="text" id="ticker" placeholder="Enter a ticker, e.g. AAPL / BRK.B / NVDA" />
+      <input type="text" id="ticker" placeholder="Enter a ticker or name — e.g. AAPL / 苹果 / BRK.B / NVDA" />
       <button id="go">Run AI Berkshire Analysis</button>
     </div>
-    <div class="hint">Tip: US stocks use the native symbol (BRK.B auto-maps to BRK-B for quotes). Data from public feeds; analysis is methodology, not advice. Log in to sync your portfolio across devices.</div>
+    <div class="hint">Tip: enter a ticker (AAPL, BRK.B) or a company name in English/Chinese (苹果, 英伟达) — we auto-resolve it. Data from public feeds; analysis is methodology, not advice. Log in to sync your portfolio across devices.</div>
     <div class="watch" id="watch">
       <span class="lbl">Portfolio</span>
     </div>
@@ -292,15 +292,20 @@ async function removeWatch(t){
 
 /* ---------- analysis ---------- */
 async function analyze(){
-  const ticker = $("#ticker").value.trim().toUpperCase();
-  if(!ticker){ toast("Enter a ticker first"); return; }
+  const inputVal = $("#ticker").value.trim();
+  if(!inputVal){ toast("Enter a ticker or company name"); return; }
   $("#go").disabled = true;
   $("#results").style.display = "none";
   $("#loading").classList.add("show");
   try{
-    const r = await fetch("/api/analyze",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ ticker }) });
+    const r = await fetch("/api/analyze",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ ticker: inputVal }) });
     const data = await r.json();
     if(data.error){ toast("Error: "+(data.detail||data.error)); return; }
+    // 解析后回填真实代码，便于后续保存组合
+    if(data.ticker){ $("#ticker").value = data.ticker; }
+    if(data.query && data.ticker && data.query.trim().toLowerCase() !== data.ticker.toLowerCase()){
+      toast(`识别为 ${data.ticker}`);
+    }
     render(data);
   }catch(e){ toast("Request failed: "+e.message); }
   finally{ $("#loading").classList.remove("show"); $("#go").disabled=false; }
