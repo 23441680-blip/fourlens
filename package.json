@@ -5,8 +5,8 @@
   "type": "module",
   "description": "FourLens — Multi-Master Value Investment Research SaaS (Buffett / Munger / Klarman / Marks)",
   "scripts": {
-    "start": "node --env-file=.env server.js",
-    "dev": "node --env-file=.env server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "dependencies": {
     "express": "^4.19.2"
