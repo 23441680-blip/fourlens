@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: fourlens
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node --env-file=.env server.js
+    envVars:
+      - key: DASHSCOPE_API_KEY
+        sync: false
+      - key: DASHSCOPE_MODEL
+        value: qwen-plus
+      - key: PORT
+        value: "3000"
+    # SQLite 需要持久盘；不挂盘则重启后数据清空（免费档也行，仅丢历史组合）
+    disk:
+      name: fourlens-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1

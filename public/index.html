@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FOURLENS · Multi-Master Value Research</title>
+<style>
+  :root{
+    --ink:#111111; --paper:#fafafa; --line:#111; --muted:#666;
+    --bull:#c0392b; --bear:#27ae60; --neutral:#7f8c8d;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);
+    font-family:"Georgia","Times New Roman",serif;line-height:1.6;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 80px}
+  header{border-bottom:2px solid var(--line);padding-bottom:18px;margin-bottom:18px}
+  .brand{font-size:34px;font-weight:700;letter-spacing:.16em}
+  .tagline{color:var(--muted);font-size:14px;margin-top:6px;letter-spacing:.02em}
+  .topbar{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+  .inputrow{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;flex:1;min-width:260px}
+  input[type=text]{flex:1;min-width:200px;padding:14px 16px;font-size:18px;
+    border:2px solid var(--line);background:#fff;border-radius:0;font-family:inherit;color:var(--ink);text-transform:uppercase;}
+  input[type=text]:focus{outline:none;box-shadow:4px 4px 0 var(--ink)}
+  button{padding:14px 26px;font-size:15px;font-weight:700;letter-spacing:.04em;
+    border:2px solid var(--line);background:var(--ink);color:#fff;cursor:pointer;font-family:inherit;border-radius:0;transition:.15s;}
+  button:hover{background:#fff;color:var(--ink)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.mini{padding:7px 14px;font-size:13px}
+  .who{font-size:13px;font-weight:700}
+  .hint{color:var(--muted);font-size:12px;margin-top:8px}
+
+  .watch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .watch .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+  .chip{border:1px solid var(--line);padding:4px 12px;font-size:13px;cursor:pointer;background:#fff;font-weight:700}
+  .chip:hover{background:var(--ink);color:#fff}
+  .chip .x{margin-left:6px;color:var(--bull);font-weight:700}
+  .savebtn{padding:6px 14px;font-size:12px}
+
+  .loading{display:none;text-align:center;padding:36px;color:var(--muted);font-style:italic}
+  .loading.show{display:block}
+  .toast{display:none;background:var(--ink);color:#fff;padding:10px 16px;position:fixed;top:20px;left:50%;transform:translateX(-50%);font-size:13px;z-index:60}
+  .toast.show{display:block}
+
+  .market{display:flex;flex-wrap:wrap;gap:18px;margin:24px 0;padding:16px 20px;border:1px solid var(--line);background:#fff}
+  .market .m{font-size:14px}
+  .market .m b{display:block;font-size:20px;letter-spacing:.02em}
+  .market .m span{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+  .cached{font-size:11px;color:var(--muted);border:1px solid #ccc;padding:2px 8px;align-self:center}
+
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+  .card{border:2px solid var(--line);background:#fff;padding:22px;position:relative}
+  .card .name{font-size:20px;font-weight:700;letter-spacing:.02em}
+  .card .role{color:var(--muted);font-size:12px;margin-bottom:12px;border-bottom:1px solid #ddd;padding-bottom:10px}
+  .badge{position:absolute;top:18px;right:18px;font-size:11px;font-weight:700;padding:3px 10px;border:1px solid;letter-spacing:.06em}
+  .conv{height:8px;border:1px solid var(--line);margin:12px 0 6px;background:#fff}
+  .conv > i{display:block;height:100%}
+  .conv-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .field{margin-top:12px;font-size:14px}
+  .field h4{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:3px}
+  .flags{margin-top:6px;padding-left:18px;font-size:13px}
+  .oneliner{margin-top:14px;padding:12px;background:#f3f3f3;border-left:3px solid var(--line);font-style:italic;font-size:14px}
+  .err{color:var(--bear);font-size:13px}
+  .toolbar{margin:18px 0 4px;display:flex;gap:10px}
+  .toolbar button{padding:8px 16px;font-size:13px}
+
+  .synth{margin-top:24px;border:2px solid var(--line);background:var(--ink);color:#fff;padding:26px}
+  .synth h3{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#bbb;margin-bottom:12px}
+  .synth p{margin-bottom:12px;font-size:15px}
+  .synth .take{background:#fff;color:var(--ink);padding:14px;border-left:3px solid var(--bull);font-style:italic}
+
+  footer{margin-top:48px;border-top:1px solid #ccc;padding-top:18px;color:var(--muted);font-size:12px}
+
+  .pricing{margin-top:56px;border-top:2px solid var(--line);padding-top:28px}
+  .pricing h2{font-size:24px;letter-spacing:.04em;margin-bottom:8px}
+  .pricing .sub{color:var(--muted);font-size:14px;margin-bottom:24px}
+  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  @media(max-width:760px){.plans{grid-template-columns:1fr}}
+  .plan{border:2px solid var(--line);padding:22px;background:#fff;display:flex;flex-direction:column}
+  .plan .t{font-size:18px;font-weight:700}
+  .plan .p{font-size:30px;font-weight:700;margin:10px 0}
+  .plan .p small{font-size:14px;color:var(--muted);font-weight:400}
+  .plan ul{list-style:none;font-size:13px;color:var(--muted);margin:10px 0 18px;flex:1}
+  .plan li{padding:5px 0;border-bottom:1px dashed #ddd}
+  .plan button{width:100%}
+  .plan.free{border-style:dashed}
+
+  /* modal */
+  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:70;align-items:center;justify-content:center}
+  .modal.show{display:flex}
+  .modal .box{background:#fff;border:2px solid var(--line);padding:28px;width:340px;max-width:90vw}
+  .modal .tabs{display:flex;gap:8px;margin-bottom:16px}
+  .modal .tabs button{flex:1;padding:8px;font-size:13px}
+  .modal .tabs button.active{background:var(--ink);color:#fff}
+  .modal label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:block;margin:10px 0 4px}
+  .modal input{width:100%;padding:10px 12px;font-size:15px;border:2px solid var(--line);font-family:inherit}
+  .modal .submit{width:100%;margin-top:18px}
+  .modal .err{color:var(--bear);font-size:13px;margin-top:10px;min-height:16px}
+
+  @media print{
+    header,.inputrow,.watch,.loading,.toolbar,.pricing,footer,.savebtn,.modal,.topbar #auth{display:none !important}
+    body{background:#fff}
+    .card,.synth{border-color:#000;break-inside:avoid}
+    .synth{background:#fff;color:#000}
+    .synth h3{color:#000}
+    .synth .take{background:#f3f3f3}
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="top">
+  <header>
+    <div class="topbar">
+      <div>
+        <div class="brand">FOURLENS</div>
+        <div class="tagline">One ticker. Four value-investing legends. Zero noise. Buffett · Munger · Klarman · Marks — adversarial multi-agent research.</div>
+      </div>
+      <span id="auth"></span>
+    </div>
+    <div class="inputrow">
+      <input type="text" id="ticker" placeholder="Enter a ticker, e.g. AAPL / BRK.B / NVDA" />
+      <button id="go">Run Four-Lens Analysis</button>
+    </div>
+    <div class="hint">Tip: US stocks use the native symbol (BRK.B auto-maps to BRK-B for quotes). Data from public feeds; analysis is methodology, not advice. Log in to sync your portfolio across devices.</div>
+    <div class="watch" id="watch">
+      <span class="lbl">Portfolio</span>
+    </div>
+  </header>
+
+  <div class="toast" id="toast"></div>
+  <div class="loading" id="loading">Four masters are researching independently — one moment…</div>
+
+  <div id="results" style="display:none">
+    <div class="market" id="market"></div>
+    <div class="toolbar">
+      <button id="save">＋ Save to portfolio</button>
+      <button id="pdf">Export PDF</button>
+    </div>
+    <div class="grid" id="cards"></div>
+    <div class="synth" id="synth"></div>
+  </div>
+
+  <section class="pricing">
+    <h2>Plans</h2>
+    <div class="sub">Billed in USD, straight into your offshore investment loop. Stripe goes live once keys are set.</div>
+    <div class="plans">
+      <div class="plan free">
+        <div class="t">Free</div>
+        <div class="p">$0</div>
+        <ul><li>3 analyses / week</li><li>Four-lens report (basic)</li><li>Community access</li></ul>
+        <button disabled style="background:#fff;color:var(--ink)">Soon</button>
+      </div>
+      <div class="plan">
+        <div class="t">Pro</div>
+        <div class="p">$19<small> / mo</small></div>
+        <ul><li>Unlimited four-lens analysis</li><li>Synthesis + red-flag tracking</li><li>PDF report export</li><li>Portfolio monitoring</li></ul>
+        <button data-plan="pro">Subscribe Pro</button>
+      </div>
+      <div class="plan">
+        <div class="t">Team</div>
+        <div class="p">$49<small> / mo</small></div>
+        <ul><li>Everything in Pro</li><li>5 seats</li><li>API access</li><li>Custom lenses</li></ul>
+        <button data-plan="team">Subscribe Team</button>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Disclaimer: FOURLENS output is a demonstration of investment methodology and a research framework — not investment advice or a solicitation. Investing involves risk; do your own research and decisions.
+    <br/>FourLens · Multi-Master Value Research · Powered by Alibaba DashScope (Qwen).
+  </footer>
+</div>
+
+<!-- auth modal -->
+<div class="modal" id="modal">
+  <div class="box">
+    <div class="tabs">
+      <button id="tab-signup" class="active">Sign up</button>
+      <button id="tab-login">Log in</button>
+    </div>
+    <label>Email</label>
+    <input type="email" id="m-email" placeholder="you@example.com" />
+    <label>Password</label>
+    <input type="password" id="m-pass" placeholder="min 6 characters" />
+    <button class="submit" id="m-submit">Create account</button>
+    <div class="err" id="m-err"></div>
+  </div>
+</div>
+
+<script>
+const VERDICT_COLOR = { Bullish:"var(--bull)", Bearish:"var(--bear)", Neutral:"var(--neutral)", Hold:"var(--neutral)" };
+const MASTER_ROLE = {
+  buffett:"Business Quality · Moat · Compounding",
+  munger:"Mental Models · Inversion · Psychology",
+  klarman:"Margin of Safety · Risk · Deep Value",
+  marks:"Cycles · Psychology · Contrarian Timing"
+};
+const $ = (s)=>document.querySelector(s);
+const LS_WATCH = "fourlens_watchlist";
+const LS_TOKEN = "fourlens_token";
+
+let TOKEN = localStorage.getItem(LS_TOKEN) || "";
+let ME = null;
+let MODAL_TAB = "signup";
+
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
+async function api(path, opts={}){
+  const headers = Object.assign({}, opts.headers);
+  if(TOKEN) headers["Authorization"] = "Bearer " + TOKEN;
+  if(opts.body) headers["Content-Type"] = "application/json";
+  return fetch(path, { method: opts.method||"GET", headers, body: opts.body });
+}
+
+/* ---------- auth ---------- */
+async function refreshAuth(){
+  if(!TOKEN){ ME=null; renderAuth(); await renderWatch(); return; }
+  try{ const r=await api("/api/me"); const d=await r.json(); if(d.user) ME=d.user; else { TOKEN=""; localStorage.removeItem(LS_TOKEN); ME=null; } }
+  catch{ ME=null; }
+  renderAuth(); await renderWatch();
+}
+function renderAuth(){
+  const el = $("#auth");
+  if(ME){
+    el.innerHTML = `<span class="who">${ME.email}</span> <button id="logout" class="mini">Log out</button>`;
+    $("#logout").onclick = ()=>{ TOKEN=""; localStorage.removeItem(LS_TOKEN); ME=null; refreshAuth(); toast("Logged out"); };
+  } else {
+    el.innerHTML = `<button id="authbtn" class="mini">Sign up / Log in</button>`;
+    $("#authbtn").onclick = openModal;
+  }
+}
+function openModal(){ $("#m-err").textContent=""; $("#modal").classList.add("show"); $("#m-email").focus(); }
+function closeModal(){ $("#modal").classList.remove("show"); }
+function setTab(tab){
+  MODAL_TAB = tab;
+  $("#tab-signup").classList.toggle("active", tab==="signup");
+  $("#tab-login").classList.toggle("active", tab==="login");
+  $("#m-submit").textContent = tab==="signup" ? "Create account" : "Log in";
+}
+async function submitAuth(){
+  const email=$("#m-email").value.trim(), pass=$("#m-pass").value;
+  $("#m-err").textContent="";
+  try{
+    const r = await api("/api/auth/"+MODAL_TAB, { method:"POST", body: JSON.stringify({email, password:pass}) });
+    const d = await r.json();
+    if(!r.ok){ $("#m-err").textContent = d.error||"failed"; return; }
+    TOKEN = d.token; localStorage.setItem(LS_TOKEN, TOKEN); closeModal();
+    await refreshAuth(); toast(MODAL_TAB==="signup" ? "Account created" : "Welcome back");
+  }catch(e){ $("#m-err").textContent="Network error"; }
+}
+
+/* ---------- watchlist / portfolio ---------- */
+function getWatch(){ try{ return JSON.parse(localStorage.getItem(LS_WATCH)||"[]"); }catch{ return []; } }
+function setWatch(arr){ localStorage.setItem(LS_WATCH, JSON.stringify(arr)); renderWatch(); }
+async function renderWatch(){
+  const w=$("#watch"); w.querySelectorAll(".chip").forEach(c=>c.remove());
+  let tickers = [];
+  if(ME){ try{ const r=await api("/api/portfolio"); const d=await r.json(); tickers=d.tickers||[]; }catch{ tickers=[]; } }
+  else { tickers = getWatch(); }
+  tickers.forEach(t=>{
+    const c=document.createElement("span"); c.className="chip";
+    c.innerHTML=`${t} <span class="x">×</span>`;
+    c.querySelector(".x").onclick=(e)=>{ e.stopPropagation(); removeWatch(t); };
+    c.onclick=()=>{ $("#ticker").value=t; analyze(); };
+    w.appendChild(c);
+  });
+}
+async function saveCurrent(){
+  const t=$("#ticker").value.trim().toUpperCase(); if(!t){ toast("Enter a ticker first"); return; }
+  if(ME){
+    try{ await api("/api/portfolio",{method:"POST",body:JSON.stringify({ticker:t})}); toast(t+" saved to portfolio"); await renderWatch(); }
+    catch(e){ toast("Save failed"); }
+  } else {
+    const w=getWatch();
+    if(!w.includes(t)){ w.unshift(t); setWatch(w.slice(0,12)); toast(t+" saved (guest) — log in to sync"); }
+    else toast(t+" already in portfolio");
+  }
+}
+async function removeWatch(t){
+  if(ME){ try{ await api("/api/portfolio",{method:"DELETE",body:JSON.stringify({ticker:t})}); await renderWatch(); }catch{} }
+  else { setWatch(getWatch().filter(x=>x!==t)); }
+}
+
+/* ---------- analysis ---------- */
+async function analyze(){
+  const ticker = $("#ticker").value.trim().toUpperCase();
+  if(!ticker){ toast("Enter a ticker first"); return; }
+  $("#go").disabled = true;
+  $("#results").style.display = "none";
+  $("#loading").classList.add("show");
+  try{
+    const r = await fetch("/api/analyze",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ ticker }) });
+    const data = await r.json();
+    if(data.error){ toast("Error: "+(data.detail||data.error)); return; }
+    render(data);
+  }catch(e){ toast("Request failed: "+e.message); }
+  finally{ $("#loading").classList.remove("show"); $("#go").disabled=false; }
+}
+function render(data){
+  const md = data.marketData || {};
+  const mEl = $("#market"); mEl.innerHTML="";
+  const items = [
+    ["Symbol", md.symbol],
+    ["Price", md.price!=null ? `${md.price} ${md.currency||""}` : "—"],
+    ["Market Cap", md.stats?.marketCap || "—"],
+    ["P/E (TTM)", md.stats?.trailingPE || "—"],
+    ["Div Yield", md.stats?.dividendYield || "—"],
+    ["52W Range", (md.stats?.fiftyTwoWeekLow&&md.stats?.fiftyTwoWeekHigh) ? `${md.stats.fiftyTwoWeekLow} ~ ${md.stats.fiftyTwoWeekHigh}` : "—"],
+  ];
+  items.forEach(([k,v])=>{ const d=document.createElement("div"); d.className="m"; d.innerHTML=`<span>${k}</span><b>${v??"—"}</b>`; mEl.appendChild(d); });
+  if(data.cached){ const c=document.createElement("span"); c.className="cached"; c.textContent="cached"; mEl.appendChild(c); }
+
+  const cEl = $("#cards"); cEl.innerHTML="";
+  (data.analyses||[]).forEach(a=>{
+    const c = document.createElement("div"); c.className="card";
+    if(a.error){ c.innerHTML=`<div class="name">${a.name||""}</div><div class="role">analysis error</div><div class="err">${a.raw||"parse failed"}</div>`; cEl.appendChild(c); return; }
+    const vc = VERDICT_COLOR[a.verdict] || "var(--neutral)";
+    const conv = Math.max(0,Math.min(100, Number(a.conviction)||0));
+    const flags = (a.redFlags||[]).map(f=>`<li>${f}</li>`).join("");
+    c.innerHTML = `
+      <span class="badge" style="color:${vc};border-color:${vc}">${a.verdict||""}</span>
+      <div class="name">${a.name}</div>
+      <div class="role">${MASTER_ROLE[a.id]||""}</div>
+      <div class="conv"><i style="width:${conv}%;background:${vc}"></i></div>
+      <div class="conv-label">Conviction ${conv}/100</div>
+      <div class="field"><h4>Thesis</h4>${a.thesis||""}</div>
+      <div class="field"><h4>Strongest point</h4>${a.keyStrength||""}</div>
+      <div class="field"><h4>Biggest weakness</h4>${a.keyWeakness||""}</div>
+      <div class="field"><h4>Red flags</h4><ul class="flags">${flags||"<li>—</li>"}</ul></div>
+      <div class="field"><h4>What would change my mind</h4>${a.whatWouldChangeMind||""}</div>
+      <div class="oneliner">"${a.oneLiner||""}"</div>`;
+    cEl.appendChild(c);
+  });
+
+  const s = data.synthesized || {};
+  const sc = VERDICT_COLOR[s.overallVerdict] || "var(--neutral)";
+  $("#synth").innerHTML = `
+    <h3>Editor's Synthesis · Overall: <span style="color:${sc}">${s.overallVerdict||"—"}</span> (${s.overallConviction??"—"}/100)</h3>
+    <p><b>Consensus:</b> ${s.consensus||""}</p>
+    <p><b>Divergence / key risk:</b> ${s.divergence||""}</p>
+    <div class="take">Actionable takeaway: ${s.actionableTakeaway||""}</div>`;
+  $("#results").style.display="block";
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+/* ---------- bindings ---------- */
+$("#save").addEventListener("click", saveCurrent);
+$("#pdf").addEventListener("click", ()=>window.print());
+$("#go").addEventListener("click", analyze);
+$("#ticker").addEventListener("keydown", e=>{ if(e.key==="Enter") analyze(); });
+$("#tab-signup").addEventListener("click", ()=>setTab("signup"));
+$("#tab-login").addEventListener("click", ()=>setTab("login"));
+$("#m-submit").addEventListener("click", submitAuth);
+$("#modal").addEventListener("click", (e)=>{ if(e.target.id==="modal") closeModal(); });
+document.querySelectorAll(".plan button[data-plan]").forEach(b=>{
+  b.addEventListener("click", async ()=>{
+    const plan = b.dataset.plan;
+    const r = await fetch("/api/checkout",{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({plan}) }).then(r=>r.json());
+    toast(r.message || JSON.stringify(r));
+  });
+});
+
+setTab("signup");
+refreshAuth();
+</script>
+</body>
+</html>
