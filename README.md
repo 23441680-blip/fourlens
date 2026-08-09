@@ -92,6 +92,48 @@ vercel --prod
 ### Railway
 同理：新建 Project → Deploy Node 服务，Start `npm start`，填环境变量。
 
+### 逐字段部署指引（Step by Step）
+
+**① GitHub（存代码，部署平台要从这里拉仓库）**
+1. 打开注册页 → 填 Username / Email / Password → 验证邮箱。
+2. 右上角 **New repository**：
+   - Repository name：`fourlens`
+   - 选 **Public**（私有也行，但部署平台需授权访问）
+   - **不要**勾 Initialize with README / .gitignore（本地已有）
+   - 点 **Create repository**
+3. 本地推代码（终端执行）：
+   ```bash
+   cd ai-value-saas
+   git branch -M main
+   git remote add origin https://github.com/<你的GitHub用户名>/fourlens.git
+   git push -u origin main
+   ```
+
+**② 选一个部署平台（Vercel 最省事 / Render 最稳）**
+
+- **Vercel**：注册页用 **Continue with GitHub** 登录 → **Add New → Project** → Import `fourlens` → Framework Preset 选 **Other** → **Deploy**。
+  部署后在 **Settings → Environment Variables** 逐条添加（Key / Value）：
+  | Key | Value |
+  |---|---|
+  | `DASHSCOPE_API_KEY` | `sk-b2cfaae3b7634d16bcaadde0ce1270d3` |
+  | `DASHSCOPE_MODEL` | `qwen-plus` |
+  | `PAYPAL_EMAIL` | `23441680@qq.com` |
+  | `PORT` | `3000` |
+  | `FINNHUB_API_KEY` | （留空，可选） |
+  加完 Variables 后回到 Deployments 重新 **Redeploy**。
+
+- **Render**：注册页 → **New → Web Service** → 连 GitHub 选 `fourlens`：
+  - Name：`fourlens`
+  - Branch：`main`
+  - Build Command：`npm install`
+  - Start Command：`npm start`
+  - 地区：选离用户近的（如 Singapore）
+  - 展开 **Environment**，加上面同样的变量（Key/Value 逐条）
+  - 点 **Create Web Service**（约 1–2 分钟起好，给一个 `.onrender.com` 域名）。
+
+**③ 验证真收款**
+部署完拿到线上 URL → 浏览器打开 → 注册账号 → 点 **Subscribe Pro** → 确认跳转 PayPal 付款页（链接含 `business=23441680@qq.com&amount=19`）→ 付款后在站内填 PayPal 邮箱点激活 → 账号显示 **PRO**。
+
 - 成本：qwen-plus ≈ 几分钱/次，百炼新用户有免费额度，边际成本近乎为零。
 - 真实行情：默认走 Yahoo（零 key）；若个别区域 Yahoo 不稳，填免费 `FINNHUB_API_KEY` 即自动升级为主源。
 
