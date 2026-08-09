@@ -151,7 +151,7 @@ app.post("/api/checkout", (req, res) => {
   const plan = req.body?.plan === "team" ? "team" : "pro";
   const price = PLAN_PRICE[plan];
   if (!PAYPAL_EMAIL && !PAYPAL_BASE) {
-    return res.json({ ok: false, message: `PayPal 收款未配置（在 .env 填 PAYPAL_EMAIL=你的收款邮箱）。套餐：${price} USD/月，单笔 <$1,000 合规。` });
+    return res.json({ ok: false, message: `PayPal 收款未配置（在 .env 填 PAYPAL_EMAIL=你的收款邮箱）。套餐：${price} USD/月。` });
   }
   // 邮箱优先：生成 xclick 标准付款链接（中国个人账号通用）
   let payUrl;
