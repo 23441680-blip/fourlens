@@ -27,6 +27,7 @@
   button:disabled{opacity:.4;cursor:not-allowed}
   button.mini{padding:7px 14px;font-size:13px}
   .who{font-size:13px;font-weight:700}
+  .badge-pro{font-size:11px;font-weight:700;padding:2px 8px;border:1px solid var(--ink);background:var(--ink);color:#fff;margin-left:6px;letter-spacing:.06em}
   .hint{color:var(--muted);font-size:12px;margin-top:8px}
 
   .watch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px}
@@ -142,7 +143,7 @@
 
   <section class="pricing">
     <h2>Plans</h2>
-    <div class="sub">Billed in USD, straight into your offshore investment loop. Stripe goes live once keys are set.</div>
+    <div class="sub">Billed in USD via PayPal — straight into your offshore loop. Personal PayPal, one payment per cycle (&lt;$1,000, compliant). Pay, then enter your PayPal email to activate.</div>
     <div class="plans">
       <div class="plan free">
         <div class="t">Free</div>
@@ -162,6 +163,14 @@
         <ul><li>Everything in Pro</li><li>5 seats</li><li>API access</li><li>Custom lenses</li></ul>
         <button data-plan="team">Subscribe Team</button>
       </div>
+    </div>
+    <div id="activate" style="display:none;margin-top:22px;border:1px dashed var(--line);padding:18px;background:#fff">
+      <div>Payment sent via PayPal? Enter the PayPal email you paid with to unlock <b id="act-plan">Pro</b>:</div>
+      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <input type="email" id="act-email" placeholder="your-paypal@email.com" style="padding:10px 12px;font-size:15px;border:2px solid var(--line);font-family:inherit;min-width:240px" />
+        <button id="act-btn">Activate</button>
+      </div>
+      <div class="hint">We cross-check against PayPal records, then your plan unlocks. Single payment per cycle (&lt;$1,000).</div>
     </div>
   </section>
 
@@ -221,7 +230,7 @@ async function refreshAuth(){
 function renderAuth(){
   const el = $("#auth");
   if(ME){
-    el.innerHTML = `<span class="who">${ME.email}</span> <button id="logout" class="mini">Log out</button>`;
+    el.innerHTML = `<span class="who">${ME.email}</span>${ME.pro?'<span class="badge-pro">PRO</span>':''} <button id="logout" class="mini">Log out</button>`;
     $("#logout").onclick = ()=>{ TOKEN=""; localStorage.removeItem(LS_TOKEN); ME=null; refreshAuth(); toast("Logged out"); };
   } else {
     el.innerHTML = `<button id="authbtn" class="mini">Sign up / Log in</button>`;
@@ -354,9 +363,30 @@ $("#modal").addEventListener("click", (e)=>{ if(e.target.id==="modal") closeModa
 document.querySelectorAll(".plan button[data-plan]").forEach(b=>{
   b.addEventListener("click", async ()=>{
     const plan = b.dataset.plan;
-    const r = await fetch("/api/checkout",{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({plan}) }).then(r=>r.json());
-    toast(r.message || JSON.stringify(r));
+    if(!ME){ openModal(); toast("Log in first to subscribe"); return; }
+    try{
+      const r = await fetch("/api/checkout",{ method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+TOKEN}, body:JSON.stringify({plan}) });
+      const d = await r.json();
+      if(!d.ok){ toast(d.message || "checkout failed"); return; }
+      window.open(d.payUrl, "_blank");
+      showActivate(d.plan);
+    }catch(e){ toast("Checkout error"); }
   });
+});
+function showActivate(plan){
+  $("#act-plan").textContent = plan==="team" ? "Team" : "Pro";
+  $("#activate").style.display = "block";
+  window.scrollTo({ top: document.body.scrollHeight, behavior:"smooth" });
+}
+$("#act-btn").addEventListener("click", async ()=>{
+  const email = $("#act-email").value.trim();
+  if(!email){ toast("Enter your PayPal email"); return; }
+  try{
+    const r = await fetch("/api/activate",{ method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+TOKEN}, body:JSON.stringify({paypalEmail:email}) });
+    const d = await r.json();
+    if(d.ok){ toast("Plan activated — welcome!"); $("#activate").style.display="none"; await refreshAuth(); }
+    else toast("Activation failed");
+  }catch(e){ toast("Activation error"); }
 });
 
 setTab("signup");

@@ -1,7 +1,18 @@
 import express from "express";
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { MASTERS, SYNTH_PROMPT } from "./prompts.js";
 import { makeMarketDataFetcher } from "./marketdata.js";
-import { auth, portfolio } from "./db.js";
+import { auth, portfolio, billing } from "./db.js";
+
+// 零依赖加载 .env（Node 不自动加载，这里手写；已存在的环境变量不被覆盖）
+try {
+  const envText = readFileSync(new URL("./.env", import.meta.url), "utf8");
+  for (const line of envText.split("\n")) {
+    const m = line.match(/^\s*([\w.-]+)\s*=\s*(.*)\s*$/);
+    if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+  }
+} catch {}
 
 const app = express();
 app.use(express.json());
@@ -126,19 +137,30 @@ app.post("/api/analyze", async (req, res) => {
   }
 });
 
-// ---------- Stripe 订阅桩 ----------
+// ---------- PayPal 个人跨境收款（无需 API key，用 PayPal.Me / 托管按钮链接） ----------
+const PAYPAL_BASE = (process.env.PAYPAL_PAYMENT_URL || "").replace(/\/$/, "");
+const PLAN_PRICE = { pro: 19, team: 49 };
 app.post("/api/checkout", (req, res) => {
-  const { plan } = req.body || {};
-  if (!process.env.STRIPE_SECRET_KEY) {
-    return res.json({
-      ok: false,
-      message:
-        "Stripe 尚未配置。填入 STRIPE_SECRET_KEY（及 Price ID）后启用线上收款。当前套餐：Pro $19/月，Team $49/月。",
-      plan,
-    });
+  const u = getUserFromReq(req);
+  if (!u) return res.status(401).json({ error: "not authenticated" });
+  const plan = req.body?.plan === "team" ? "team" : "pro";
+  if (!PAYPAL_BASE) {
+    return res.json({ ok: false, message: `PayPal 收款链接未配置（在 .env 填 PAYPAL_PAYMENT_URL，如 https://paypal.me/你的账号）。套餐：${PLAN_PRICE[plan]} USD/月，单笔 <$1,000 合规。` });
   }
-  // 真实实现：用 stripe.checkout.sessions.create(...) 返回 url
-  res.json({ ok: true, message: "Checkout 将跳转 Stripe。", plan });
+  const price = PLAN_PRICE[plan];
+  const payUrl = `${PAYPAL_BASE}/${price}`;
+  const orderId = randomUUID();
+  billing.createOrder(u.id, plan, orderId);
+  res.json({ ok: true, payUrl, orderId, plan, price });
+});
+
+// 用户付款后回填 PayPal 邮箱 → 标记 Pro（MVP 信任制，人工对照 PayPal 记录复核）
+app.post("/api/activate", (req, res) => {
+  const u = getUserFromReq(req);
+  if (!u) return res.status(401).json({ error: "not authenticated" });
+  const { paypalEmail } = req.body || {};
+  billing.activate(u.id, paypalEmail);
+  res.json({ ok: true, pro: true });
 });
 
 // ---------- 账号 / 组合监控（SQLite） ----------
@@ -168,7 +190,7 @@ app.post("/api/auth/login", (req, res) => {
 
 app.get("/api/me", (req, res) => {
   const u = getUserFromReq(req);
-  res.json({ user: u ? { email: u.email } : null });
+  res.json({ user: u ? { email: u.email, pro: u.pro_status === "active" } : null });
 });
 
 app.get("/api/portfolio", (req, res) => {

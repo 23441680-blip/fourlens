@@ -29,7 +29,20 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(user_id, ticker)
   );
+  CREATE TABLE IF NOT EXISTS orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id TEXT UNIQUE NOT NULL,
+    user_id INTEGER NOT NULL,
+    plan TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'created',
+    paypal_email TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
+
+// 迁移：老库补列（pro_status / paypal_email），重复执行忽略错误
+try { db.exec("ALTER TABLE users ADD COLUMN pro_status TEXT NOT NULL DEFAULT 'none'"); } catch {}
+try { db.exec("ALTER TABLE users ADD COLUMN paypal_email TEXT"); } catch {}
 
 function hashPassword(pw) {
   const salt = randomBytes(16).toString("hex");
@@ -71,7 +84,7 @@ export const auth = {
       db.prepare("DELETE FROM sessions WHERE token=?").run(token);
       return null;
     }
-    return db.prepare("SELECT id, email FROM users WHERE id=?").get(s.user_id) || null;
+    return db.prepare("SELECT id, email, pro_status, paypal_email FROM users WHERE id=?").get(s.user_id) || null;
   },
 };
 
@@ -87,5 +100,15 @@ export const portfolio = {
   remove(userId, ticker) {
     const t = ticker.replace(/\./g, "-").toUpperCase();
     db.prepare("DELETE FROM portfolios WHERE user_id=? AND ticker=?").run(userId, t);
+  },
+};
+
+// 个人 PayPal 收款：订单记录 + Pro 状态
+export const billing = {
+  createOrder(userId, plan, orderId) {
+    db.prepare("INSERT OR IGNORE INTO orders(order_id, user_id, plan) VALUES (?,?,?)").run(orderId, userId, plan);
+  },
+  activate(userId, paypalEmail) {
+    db.prepare("UPDATE users SET pro_status='active', paypal_email=? WHERE id=?").run(paypalEmail || null, userId);
   },
 };
