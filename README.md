@@ -64,15 +64,15 @@ node --env-file=.env server.js
 采用**个人 PayPal 跨境收款**——无需 API key、无需海外公司，单笔 <$1,000 绑个人银行卡合规结汇（Stripe 个人大陆账户不支持，必须海外公司，故不走）。
 
 流程：
-1. 在 `.env` 填 `PAYPAL_PAYMENT_URL`（你的 PayPal.Me 链接，如 `https://paypal.me/你的账号`）。`/api/checkout` 会自动拼金额：`pro → /19`、`team → /49`。
+1. 在 `.env` 填 `PAYPAL_EMAIL`（你的 PayPal 登录邮箱＝收款邮箱，如 `23441680@qq.com`）。`/api/checkout` 会自动生成 xclick 标准付款链接（`business=邮箱&amount=19/49&currency_code=USD`），**中国大陆个人账号通用，不依赖 paypal.me**（后者中国个人账号不支持）。
 2. 用户点订阅 → 前端 `window.open` 打开 PayPal 付款页 → 付款后回填 PayPal 邮箱 → `POST /api/activate` 标记账号 `pro_status='active'`（MVP 信任制，人工对照 PayPal 记录复核；个体户执照办好后可升级 PayPal 企业户 / 连连 / Airwallex 做大额自动扣费）。
-3. 未填 `PAYPAL_PAYMENT_URL` 时，`/api/checkout` 返回提示文案，不报错。
+3. 未填 `PAYPAL_EMAIL`（及 `PAYPAL_PAYMENT_URL`）时，`/api/checkout` 返回提示文案，不报错。
 
 ## 部署
 
 **前置**：先注册 GitHub（存代码）+ 一个部署平台账号（Vercel / Render / Railway，均免费档够用）。本项目已 `git init` 就绪，代码推到 GitHub 后，在部署平台"Import Repository"即可。
 
-Node 项目，`npm start` 启动（`server.js` 同时托管静态前端与 API）。在平台环境变量配置 `DASHSCOPE_API_KEY`、`DASHSCOPE_MODEL`（可选 `FINNHUB_API_KEY`、`PAYPAL_PAYMENT_URL`）。
+Node 项目，`npm start` 启动（`server.js` 同时托管静态前端与 API）。在平台环境变量配置 `DASHSCOPE_API_KEY`、`DASHSCOPE_MODEL`（可选 `FINNHUB_API_KEY`、`PAYPAL_EMAIL`）。
 
 > SQLite 持久化提示：用户账号/组合存在 `data/fourlens.db`。**Railway 与 Render（已带 `render.yaml` 挂持久盘）文件会保留**；**Vercel serverless 文件系统是临时的，重启即清空**（仅丢历史组合，不影响分析）。要 Vercel 也持久，把 `db.js` 换成 Supabase Postgres 即可。
 
@@ -109,6 +109,6 @@ ai-value-saas/
 ├─ marketdata.js    # 真实行情源（Yahoo meta 零 key 主源 / Finnhub 可选增强）
 ├─ prompts.js       # 四位大师 system prompt + 综合编辑 prompt
 ├─ public/index.html# 纯黑墨极简前端（四镜卡片 + 综合结论 + 定价）
-├─ .env             # 百炼 Key / 模型 / 端口 / Finnhub(可选) / PayPal 链接（已 gitignore）
+├─ .env             # 百炼 Key / 模型 / 端口 / Finnhub(可选) / PayPal 邮箱（已 gitignore）
 └─ package.json
 ```

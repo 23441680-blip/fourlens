@@ -137,18 +137,38 @@ app.post("/api/analyze", async (req, res) => {
   }
 });
 
-// ---------- PayPal 个人跨境收款（无需 API key，用 PayPal.Me / 托管按钮链接） ----------
+// ---------- PayPal 个人跨境收款（无需 API key） ----------
+// 两种配置任选其一：
+//   1) PAYPAL_EMAIL=你的收款邮箱   → 用 xclick 标准付款链接（中国大陆个人账号通用，推荐）
+//   2) PAYPAL_PAYMENT_URL=https://paypal.me/你的账号 → 旧式拼接金额
+const PAYPAL_EMAIL = (process.env.PAYPAL_EMAIL || "").trim();
 const PAYPAL_BASE = (process.env.PAYPAL_PAYMENT_URL || "").replace(/\/$/, "");
 const PLAN_PRICE = { pro: 19, team: 49 };
+const PLAN_NAME = { pro: "FourLens Pro", team: "FourLens Team" };
 app.post("/api/checkout", (req, res) => {
   const u = getUserFromReq(req);
   if (!u) return res.status(401).json({ error: "not authenticated" });
   const plan = req.body?.plan === "team" ? "team" : "pro";
-  if (!PAYPAL_BASE) {
-    return res.json({ ok: false, message: `PayPal 收款链接未配置（在 .env 填 PAYPAL_PAYMENT_URL，如 https://paypal.me/你的账号）。套餐：${PLAN_PRICE[plan]} USD/月，单笔 <$1,000 合规。` });
-  }
   const price = PLAN_PRICE[plan];
-  const payUrl = `${PAYPAL_BASE}/${price}`;
+  if (!PAYPAL_EMAIL && !PAYPAL_BASE) {
+    return res.json({ ok: false, message: `PayPal 收款未配置（在 .env 填 PAYPAL_EMAIL=你的收款邮箱）。套餐：${price} USD/月，单笔 <$1,000 合规。` });
+  }
+  // 邮箱优先：生成 xclick 标准付款链接（中国个人账号通用）
+  let payUrl;
+  if (PAYPAL_EMAIL) {
+    const q = new URLSearchParams({
+      cmd: "_xclick",
+      business: PAYPAL_EMAIL,
+      item_name: PLAN_NAME[plan],
+      amount: String(price),
+      currency_code: "USD",
+      no_note: "1",
+      no_shipping: "1",
+    });
+    payUrl = `https://www.paypal.com/cgi-bin/webscr?${q.toString()}`;
+  } else {
+    payUrl = `${PAYPAL_BASE}/${price}`;
+  }
   const orderId = randomUUID();
   billing.createOrder(u.id, plan, orderId);
   res.json({ ok: true, payUrl, orderId, plan, price });
