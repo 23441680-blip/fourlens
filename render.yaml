@@ -4,8 +4,10 @@ services:
     runtime: node
     plan: free
     buildCommand: npm install
-    startCommand: node --env-file=.env server.js
+    startCommand: node server.js
     envVars:
+      - key: NODE_VERSION
+        value: "22"
       - key: DASHSCOPE_API_KEY
         sync: false
       - key: DASHSCOPE_MODEL
