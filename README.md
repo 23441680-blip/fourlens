@@ -39,10 +39,12 @@ node --env-file=.env server.js
   "synthesized": { "consensus":"…", "divergence":"…", "overallVerdict":"Hold", "overallConviction":81, "actionableTakeaway":"…" }
 }
 ```
-行情源（`marketdata.js`，三级回退）：
-1. **Yahoo Finance chart `meta`（默认主源，零 key）**——返回实时价 + 市值 + TTM/远期 PE + 股息率 + Beta + 52 周高低，覆盖研报所需核心基本面。
-2. **Finnhub（可选增强，填 `FINNHUB_API_KEY`）**——更稳定，并补 `sector / industry / 公司简介`；免费 key 注册即得（https://finnhub.io）。
-3. **模型自身知识**——若部署环境出网受限，自动回退，UI 标注 `source: model-knowledge`。
+行情源（`marketdata.js`，多源级联，全程零 key 优先）：
+- **美股**：Nasdaq 公开接口（价格/市值/PE/股息率/52 周/板块/1 年目标价，最稳）→ Yahoo v7+crumb（补强）→ SEC EDGAR 官方财报（自算 PE/市值，硬兜底）。
+- **港股 / A 股（非美股）**：腾讯财经 gtimg（零 key，国内网络极稳）补价格 + 52 周 + TTM PE + 名称。已覆盖全部自有标的（腾讯 0700.HK、泡泡玛特 09992.HK、中海油 00883.HK、茅台 600519.SS 等）。
+- **Finnhub（可选增强）**：填 `FINNHUB_API_KEY` 可升级为主源并补 `sector/industry/简介`；免费 key 注册即得（https://finnhub.io）。
+- **模型自身知识**：所有源失败时的最后兜底，UI 标注 `source: model-knowledge`。
+- 诊断端点：`GET /api/diag?q=AAPL`（或 `?q=腾讯` / `?q=0700.HK`）逐层返回 Yahoo / Nasdaq / SEC / 腾讯 各源实际结果，线上一眼定位是哪层挂了。
 
 `makeMarketDataFetcher(env)` 统一入口；Yahoo 走 `query1/query2` 双主机 + 浏览器 UA 重试以提升成功率。
 
@@ -141,7 +143,7 @@ vercel --prod
 
 ## 已知限制 / 下一步
 
-- 行情已零 key 用 Yahoo chart meta（价格+市值+PE+股息率+Beta+52周），够研报所需；若要更稳定或补行业/简介，填免费 Finnhub key 即可自动升级为主源。
+- 行情零 key 多源已落地：美股 Nasdaq→Yahoo→SEC 级联；港股/A 股腾讯 gtimg 兜底（覆盖全部自有标的）。Yahoo 在部分网络环境会被限流/403，已自动降级到 Nasdaq/SEC/腾讯，不影响分析。若要补 `sector/industry/简介` 或更稳，填免费 Finnhub key 即升主源。
 - 加入：用户账号、历史报告存档、持仓组合监控、PDF 导出、邮件早报（复用现有 Edge TTS 管线）。
 - 合规：输出为方法论/框架演示，非投资建议——前端已带免责声明，上线前请复核当地金融监管要求。
 

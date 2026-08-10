@@ -2,7 +2,7 @@ import express from "express";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { MASTERS, SYNTH_PROMPT } from "./prompts.js";
-import { makeMarketDataFetcher, resolveSymbol } from "./marketdata.js";
+import { makeMarketDataFetcher, resolveSymbol, diagnoseMarket } from "./marketdata.js";
 import { auth, portfolio, billing } from "./db.js";
 
 // 零依赖加载 .env（Node 不自动加载，这里手写；已存在的环境变量不被覆盖）
@@ -52,7 +52,10 @@ function marketContextText(md) {
   if (md.stats.marketCap) lines.push(`市值: ${md.stats.marketCap}`);
   if (md.stats.trailingPE) lines.push(`动态市盈率(TTM): ${md.stats.trailingPE}`);
   if (md.stats.forwardPE) lines.push(`远期市盈率: ${md.stats.forwardPE}`);
+  if (md.stats.pegRatio) lines.push(`PEG(未来12月): ${md.stats.pegRatio}`);
   if (md.stats.dividendYield) lines.push(`股息率: ${md.stats.dividendYield}`);
+  if (md.stats.annualDividend) lines.push(`年化股息: ${md.stats.annualDividend}`);
+  if (md.stats.oneYearTarget) lines.push(`分析师1年目标价: ${md.stats.oneYearTarget}`);
   if (md.stats.beta) lines.push(`Beta: ${md.stats.beta}`);
   if (md.stats.fiftyTwoWeekLow || md.stats.fiftyTwoWeekHigh)
     lines.push(`52周区间: ${md.stats.fiftyTwoWeekLow} ~ ${md.stats.fiftyTwoWeekHigh}`);
@@ -61,7 +64,40 @@ function marketContextText(md) {
   return lines.join("\n");
 }
 
-// ---------- 调用百炼 Qwen（单大师） ----------
+// ---------- 调用百炼 Qwen（带超时 + 重试） ----------
+// 关键：单点失败绝不能让整个分析 500。四个大师并发，掉一个只降级那一个。
+const LLM_TIMEOUT = 90000;
+const LLM_RETRIES = 2;
+
+async function callLLM(body, label = "llm") {
+  let lastErr = null;
+  for (let attempt = 0; attempt <= LLM_RETRIES; attempt++) {
+    try {
+      const res = await fetch(DASHSCOPE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(LLM_TIMEOUT),
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        // 4xx（除 429）属于请求本身有问题，重试无意义
+        if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+          throw new Error(`${label} ${res.status}: ${t.slice(0, 200)}`);
+        }
+        lastErr = new Error(`${label} ${res.status}: ${t.slice(0, 200)}`);
+      } else {
+        return await res.json();
+      }
+    } catch (e) {
+      lastErr = e;
+      if (/\d{3}:/.test(String(e.message)) && !/429/.test(String(e.message))) break;
+    }
+    if (attempt < LLM_RETRIES) await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+  }
+  throw lastErr || new Error(`${label} failed`);
+}
+
 async function callMaster(master, ticker, marketText) {
   const user = `Company ticker: ${ticker}\n\nMarket data (best-effort, may be partial):\n${marketText}\n\nProvide your analysis as JSON per your instructions.`;
   const body = {
@@ -73,21 +109,18 @@ async function callMaster(master, ticker, marketText) {
       { role: "user", content: user },
     ],
   };
-  const res = await fetch(DASHSCOPE_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${API_KEY}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
-  const parsed = parseJSON(content);
-  if (!parsed) {
-    return { id: master.id, name: master.name, error: true, raw: content?.slice(0, 500) };
+  try {
+    const data = await callLLM(body, `master:${master.id}`);
+    const content = data?.choices?.[0]?.message?.content;
+    const parsed = parseJSON(content);
+    if (!parsed) {
+      return { id: master.id, name: master.name, error: true, raw: content?.slice(0, 500) };
+    }
+    return { id: master.id, name: master.name, ...parsed };
+  } catch (e) {
+    // 单个大师失败只降级自己，不拖垮整体
+    return { id: master.id, name: master.name, error: true, raw: `request failed: ${String(e?.message || e).slice(0, 300)}` };
   }
-  return { id: master.id, name: master.name, ...parsed };
 }
 
 async function synthesize(ticker, analyses) {
@@ -101,14 +134,13 @@ async function synthesize(ticker, analyses) {
       { role: "user", content: user },
     ],
   };
-  const res = await fetch(DASHSCOPE_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  const parsed = parseJSON(data?.choices?.[0]?.message?.content);
-  return parsed || { error: true };
+  try {
+    const data = await callLLM(body, "synthesize");
+    const parsed = parseJSON(data?.choices?.[0]?.message?.content);
+    return parsed || { error: true };
+  } catch (e) {
+    return { error: true, detail: String(e?.message || e).slice(0, 300) };
+  }
 }
 
 // ---------- 路由 ----------
@@ -140,6 +172,22 @@ app.post("/api/analyze", async (req, res) => {
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: "analysis failed", detail: String(e?.message || e) });
+  }
+});
+
+// 行情诊断端点：线上排查用（/api/diag?q=苹果）
+// 返回每一层数据源的实际结果，可一眼看出是 crumb 挂了还是被墙
+app.get("/api/diag", async (req, res) => {
+  const q = (req.query?.q || "AAPL").toString().trim();
+  try {
+    const resolved = await resolveSymbol(q);
+    if (!resolved) return res.json({ query: q, resolved: null, note: "name not resolved" });
+    const sym = resolved.replace(/\./g, "-").toUpperCase();
+    const diag = await diagnoseMarket(sym);
+    const merged = await fetchMarketData(resolved);
+    res.json({ query: q, resolved, diag, merged });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
   }
 });
 

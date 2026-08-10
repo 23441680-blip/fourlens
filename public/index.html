@@ -318,8 +318,12 @@ function render(data){
     ["Price", md.price!=null ? `${md.price} ${md.currency||""}` : "—"],
     ["Market Cap", md.stats?.marketCap || "—"],
     ["P/E (TTM)", md.stats?.trailingPE || "—"],
+    ["Fwd P/E", md.stats?.forwardPE || "—"],
+    ["PEG", md.stats?.pegRatio || "—"],
     ["Div Yield", md.stats?.dividendYield || "—"],
     ["52W Range", (md.stats?.fiftyTwoWeekLow&&md.stats?.fiftyTwoWeekHigh) ? `${md.stats.fiftyTwoWeekLow} ~ ${md.stats.fiftyTwoWeekHigh}` : "—"],
+    ["1Y Target", md.stats?.oneYearTarget || "—"],
+    ["Sector", md.profile?.sector || "—"],
   ];
   items.forEach(([k,v])=>{ const d=document.createElement("div"); d.className="m"; d.innerHTML=`<span>${k}</span><b>${v??"—"}</b>`; mEl.appendChild(d); });
   if(data.cached){ const c=document.createElement("span"); c.className="cached"; c.textContent="cached"; mEl.appendChild(c); }
