@@ -630,8 +630,12 @@ const NAME_ALIASES = {
   "快手": "1024.HK", "kuaishou": "1024.HK",
 };
 
+// 接受：美股字母开头 / 港股(A) 数字+ .HK / A股 6位+ .SS|.SZ / 伦敦 .L / 东京 .T
 function isTicker(s) {
-  return /^[A-Z][A-Z0-9.\-]{0,9}$/.test(s);
+  if (/^[A-Z][A-Z0-9.\-]{0,9}$/.test(s)) return true;
+  if (/^\d{4,5}\.(HK|L|T)$/.test(s)) return true;
+  if (/^\d{6}\.(SS|SZ)$/.test(s)) return true;
+  return false;
 }
 
 // 把任意输入（代码 / 中文名 / 英文名）解析为标准代码；解析失败返回 null

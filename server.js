@@ -277,7 +277,7 @@ app.post("/api/portfolio", (req, res) => {
   const u = getUserFromReq(req);
   if (!u) return res.status(401).json({ error: "not authenticated" });
   const ticker = (req.body?.ticker || "").trim().toUpperCase();
-  if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(ticker)) return res.status(400).json({ error: "invalid ticker" });
+  if (!/^[A-Z][A-Z0-9.\-]{0,9}$|^\d{4,5}\.(HK|L|T)$|^\d{6}\.(SS|SZ)$/.test(ticker)) return res.status(400).json({ error: "invalid ticker" });
   res.json({ ticker: portfolio.add(u.id, ticker) });
 });
 
@@ -285,6 +285,7 @@ app.delete("/api/portfolio", (req, res) => {
   const u = getUserFromReq(req);
   if (!u) return res.status(401).json({ error: "not authenticated" });
   const ticker = (req.body?.ticker || "").trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9.\-]{0,9}$|^\d{4,5}\.(HK|L|T)$|^\d{6}\.(SS|SZ)$/.test(ticker)) return res.status(400).json({ error: "invalid ticker" });
   portfolio.remove(u.id, ticker);
   res.json({ ok: true });
 });
