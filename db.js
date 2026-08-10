@@ -36,13 +36,15 @@ db.exec(`
     plan TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'created',
     paypal_email TEXT,
+    paid_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
 
-// 迁移：老库补列（pro_status / paypal_email），重复执行忽略错误
+// 迁移：老库补列（pro_status / paypal_email / orders.paid_at），重复执行忽略错误
 try { db.exec("ALTER TABLE users ADD COLUMN pro_status TEXT NOT NULL DEFAULT 'none'"); } catch {}
 try { db.exec("ALTER TABLE users ADD COLUMN paypal_email TEXT"); } catch {}
+try { db.exec("ALTER TABLE orders ADD COLUMN paid_at TEXT"); } catch {}
 
 function hashPassword(pw) {
   const salt = randomBytes(16).toString("hex");
@@ -108,7 +110,21 @@ export const billing = {
   createOrder(userId, plan, orderId) {
     db.prepare("INSERT OR IGNORE INTO orders(order_id, user_id, plan) VALUES (?,?,?)").run(orderId, userId, plan);
   },
+  // IPN 回传后标记付款完成 + 自动激活 Pro（不再靠信任制手动回填）
+  markPaid(orderId, payerEmail) {
+    const o = db.prepare("SELECT * FROM orders WHERE order_id=?").get(orderId);
+    if (!o) return null;
+    db.prepare("UPDATE orders SET status='paid', paypal_email=?, paid_at=datetime('now') WHERE order_id=?").run(payerEmail || null, orderId);
+    db.prepare("UPDATE users SET pro_status='active', paypal_email=? WHERE id=?").run(payerEmail || null, o.user_id);
+    return o;
+  },
   activate(userId, paypalEmail) {
     db.prepare("UPDATE users SET pro_status='active', paypal_email=? WHERE id=?").run(paypalEmail || null, userId);
+  },
+  // 管理员看板：所有订单 + 用户邮箱（巡检/对账用）
+  listOrders() {
+    return db.prepare(
+      "SELECT o.order_id, o.user_id, o.plan, o.status, o.paypal_email AS order_paypal, o.created_at, o.paid_at, u.email AS user_email, u.pro_status FROM orders o LEFT JOIN users u ON u.id=o.user_id ORDER BY o.created_at DESC"
+    ).all();
   },
 };

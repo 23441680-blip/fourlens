@@ -16,12 +16,19 @@ try {
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 app.use(express.static("public"));
 
 const DASHSCOPE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 const API_KEY = process.env.DASHSCOPE_API_KEY || "";
 const MODEL = process.env.DASHSCOPE_MODEL || "qwen-plus";
 const PORT = process.env.PORT || 3000;
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "fourlens-admin";
+const IPN_VERIFY = process.env.IPN_VERIFY !== "off"; // 默认开启 PayPal 验证；本地测试设 IPN_VERIFY=off
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "https://aiberkshire.onrender.com";
+const PAYPAL_IPN_VERIFY_URL = process.env.PAYPAL_IPN_SANDBOX === "1"
+  ? "https://ipnpb.sandbox.paypal.com/cgi-bin/webscr"
+  : "https://ipnpb.paypal.com/cgi-bin/webscr";
 const fetchMarketData = makeMarketDataFetcher(process.env);
 
 // 结果缓存：按 ticker+model 缓存 30 分钟，重复查询秒回、省百炼成本（自然支撑免费档）
@@ -208,22 +215,26 @@ app.post("/api/checkout", (req, res) => {
     return res.json({ ok: false, message: `PayPal 收款未配置（在 .env 填 PAYPAL_EMAIL=你的收款邮箱）。套餐：${price} USD/月。` });
   }
   // 邮箱优先：生成 xclick 标准付款链接（中国个人账号通用）
+  const orderId = randomUUID();
   let payUrl;
   if (PAYPAL_EMAIL) {
     const q = new URLSearchParams({
       cmd: "_xclick",
       business: PAYPAL_EMAIL,
       item_name: PLAN_NAME[plan],
+      item_number: plan,
       amount: String(price),
       currency_code: "USD",
       no_note: "1",
       no_shipping: "1",
+      custom: orderId,
+      notify_url: `${PUBLIC_BASE_URL}/api/paypal-ipn`,
+      return: `${PUBLIC_BASE_URL}/pro-thanks`,
     });
     payUrl = `https://www.paypal.com/cgi-bin/webscr?${q.toString()}`;
   } else {
     payUrl = `${PAYPAL_BASE}/${price}`;
   }
-  const orderId = randomUUID();
   billing.createOrder(u.id, plan, orderId);
   res.json({ ok: true, payUrl, orderId, plan, price });
 });
@@ -235,6 +246,43 @@ app.post("/api/activate", (req, res) => {
   const { paypalEmail } = req.body || {};
   billing.activate(u.id, paypalEmail);
   res.json({ ok: true, pro: true });
+});
+
+// PayPal IPN：客户付款后 PayPal 主动 POST 通知 → 标记订单已付 + 自动激活 Pro
+// （不再靠信任制手动回填；这是哥老官"监测客户付款路径"的核心闭环）
+app.post("/api/paypal-ipn", (req, res) => {
+  const body = req.body || {};
+  res.sendStatus(200); // 必须先回 200，否则 PayPal 会重试
+  const orderId = body.custom || body.item_number;
+  const payerEmail = body.payer_email || null;
+  const paymentStatus = body.payment_status;
+  const txnId = body.txn_id;
+  const finish = (verified) => {
+    if (!verified) { console.warn("[IPN] unverified, ignored", txnId); return; }
+    if (paymentStatus !== "Completed") { console.log("[IPN] status != Completed:", paymentStatus, txnId); return; }
+    if (!orderId) { console.warn("[IPN] missing orderId", txnId); return; }
+    const o = billing.markPaid(orderId, payerEmail);
+    console.log("[IPN] markPaid", orderId, o ? "OK" : "ORDER_NOT_FOUND");
+  };
+  if (!IPN_VERIFY) { finish(true); return; } // 本地测试跳过真 PayPal 验证
+  // 真实验证：原样回 POST PayPal + cmd=_notify-validate
+  const params = new URLSearchParams({ ...body, cmd: "_notify-validate" });
+  fetch(PAYPAL_IPN_VERIFY_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString(),
+  })
+    .then((r) => r.text())
+    .then((text) => finish(text.trim() === "VERIFIED"))
+    .catch((e) => console.error("[IPN] verify fetch failed", e));
+});
+
+// 管理员付款看板（ADMIN_TOKEN 保护，供巡检/对账）
+app.get("/api/admin/payments", (req, res) => {
+  const h = req.headers["authorization"] || "";
+  const tok = h.startsWith("Bearer ") ? h.slice(7) : null;
+  if (tok !== ADMIN_TOKEN) return res.status(401).json({ error: "unauthorized" });
+  res.json({ orders: billing.listOrders() });
 });
 
 // ---------- 账号 / 组合监控（SQLite） ----------
