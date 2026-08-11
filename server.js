@@ -21,7 +21,7 @@ app.use(express.static("public"));
 
 const DASHSCOPE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 const API_KEY = process.env.DASHSCOPE_API_KEY || "";
-const MODEL = process.env.DASHSCOPE_MODEL || "qwen-plus";
+const MODEL = process.env.DASHSCOPE_MODEL || "qwen3.7-max";
 const PORT = process.env.PORT || 3000;
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "fourlens-admin";
 const IPN_VERIFY = process.env.IPN_VERIFY !== "off"; // 默认开启 PayPal 验证；本地测试设 IPN_VERIFY=off

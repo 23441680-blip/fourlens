@@ -11,7 +11,7 @@ services:
       - key: DASHSCOPE_API_KEY
         sync: false
       - key: DASHSCOPE_MODEL
-        value: qwen-plus
+        value: qwen3.7-max
       - key: PORT
         value: "3000"
     # SQLite 需要持久盘；不挂盘则重启后数据清空（免费档也行，仅丢历史组合）
