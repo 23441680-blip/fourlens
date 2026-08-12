@@ -65,6 +65,7 @@ function newSession(userId) {
 }
 
 export const auth = {
+  getUserById(id) { return db.prepare("SELECT * FROM users WHERE id=?").get(id) || null; },
   signup(email, pw) {
     email = (email || "").trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("invalid email");
