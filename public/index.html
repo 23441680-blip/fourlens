@@ -144,12 +144,12 @@
   <section class="pricing">
     <h2>Plans</h2>
     <div class="sub">Billed in USD via PayPal. After paying, enter your PayPal email to activate.</div>
-    <div class="plans">
+    <div class="plans" id="plans">
       <div class="plan free">
         <div class="t">Free</div>
         <div class="p">$0</div>
-        <ul><li>3 analyses / week</li><li>Four-lens report (basic)</li><li>Community access</li></ul>
-        <button disabled style="background:#fff;color:var(--ink)">Soon</button>
+        <ul><li><b>1 free four-lens analysis</b></li><li>Full report (4 masters + synthesis)</li><li>Upgrade anytime</li></ul>
+        <button onclick="setTab('signup');openModal()" style="background:#fff;color:var(--ink);border:2px solid var(--ink)">Sign up free</button>
       </div>
       <div class="plan">
         <div class="t">Pro</div>
@@ -298,7 +298,9 @@ async function analyze(){
   $("#results").style.display = "none";
   $("#loading").classList.add("show");
   try{
-    const r = await fetch("/api/analyze",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ ticker: inputVal }) });
+    const r = await fetch("/api/analyze",{ method:"POST", headers:{"Content-Type":"application/json", ...(TOKEN?{"Authorization":"Bearer "+TOKEN}:{})}, body: JSON.stringify({ ticker: inputVal }) });
+    if(r.status===401){ setTab("signup"); openModal(); toast("Sign up free — includes 1 free four-lens analysis"); return; }
+    if(r.status===403){ document.getElementById("plans").scrollIntoView({behavior:"smooth"}); toast("Free analysis used — upgrade to Pro for unlimited reports"); return; }
     const data = await r.json();
     if(data.error){ toast("Error: "+(data.detail||data.error)); return; }
     // 解析后回填真实代码，便于后续保存组合
