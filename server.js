@@ -1,6 +1,7 @@
 import express from "express";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import nodemailer from "nodemailer";
 import { MASTERS, SYNTH_PROMPT } from "./prompts.js";
 import { makeMarketDataFetcher, resolveSymbol, diagnoseMarket } from "./marketdata.js";
 import { auth, portfolio, billing } from "./db.js";
@@ -259,6 +260,7 @@ app.post("/api/activate", (req, res) => {
   if (!u) return res.status(401).json({ error: "not authenticated" });
   const { paypalEmail } = req.body || {};
   billing.activate(u.id, paypalEmail);
+  sendPicksEmail(u.email); // 激活即发送本月Top 3低估值筛选报告到注册邮箱
   res.json({ ok: true, pro: true });
 });
 
@@ -277,6 +279,10 @@ app.post("/api/paypal-ipn", (req, res) => {
     if (!orderId) { console.warn("[IPN] missing orderId", txnId); return; }
     const o = billing.markPaid(orderId, payerEmail);
     console.log("[IPN] markPaid", orderId, o ? "OK" : "ORDER_NOT_FOUND");
+    if (o) {
+      const bu = auth.getUserById(o.user_id);
+      if (bu) sendPicksEmail(bu.email); // PayPal自动激活后发报告到注册邮箱
+    }
   };
   if (!IPN_VERIFY) { finish(true); return; } // 本地测试跳过真 PayPal 验证
   // 真实验证：原样回 POST PayPal + cmd=_notify-validate
@@ -350,6 +356,58 @@ app.get("/api/picks", (req, res) => {
   if (u.pro_status === "active") return res.json({ locked: false, updatedAt: PRO_PICKS.updatedAt, source: PRO_PICKS.source, picks: PRO_PICKS.picks });
   return res.json({ locked: true, updatedAt: PRO_PICKS.updatedAt, teaser: PRO_PICKS.teaser });
 });
+
+// ---------- Picks报告页 + 邮件送达 ----------
+const SMTP_USER = process.env.SMTP_USER || "";
+const SMTP_PASS = process.env.SMTP_PASS || "";
+const SMTP_HOST = process.env.SMTP_HOST || "smtp.qq.com";
+const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
+const SMTP_FROM = process.env.SMTP_FROM || (SMTP_USER ? `AI Berkshire <${SMTP_USER}>` : "");
+let mailer = null;
+if (SMTP_USER && SMTP_PASS) {
+  mailer = nodemailer.createTransport({ host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_PORT === 465, auth: { user: SMTP_USER, pass: SMTP_PASS } });
+  console.log("[email] SMTP configured:", SMTP_HOST, SMTP_USER);
+} else {
+  console.warn("[email] SMTP not configured (set SMTP_USER/SMTP_PASS) — report emails disabled");
+}
+
+function buildPicksReportHtml() {
+  const rows = PRO_PICKS.picks.map((p, i) => `
+    <tr>
+      <td style="padding:16px 12px;border-bottom:1px solid #e5e5e5;vertical-align:top"><b style="font-size:16px">${i + 1}. ${p.ticker}</b><br><span style="color:#666;font-size:13px">${p.name}</span></td>
+      <td style="padding:16px 12px;border-bottom:1px solid #e5e5e5;color:#1a7f37;font-weight:700;white-space:nowrap;font-size:15px;vertical-align:top">${p.upside}</td>
+      <td style="padding:16px 12px;border-bottom:1px solid #e5e5e5;font-size:14px;line-height:1.5">${p.note}<br><span style="color:#666;font-size:12.5px">Fair value ${p.fairValue} vs ${p.price} at screen date · ${p.hint}</span></td>
+    </tr>`).join("");
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI Berkshire · Pro Picks Report</title></head>
+<body style="margin:0;background:#faf9f6;font-family:Georgia,'Times New Roman',serif;color:#111">
+<div style="max-width:760px;margin:0 auto;padding:36px 20px">
+  <div style="border:2px solid #111;background:#fff;padding:30px 28px">
+    <div style="font-size:12px;letter-spacing:.3em;color:#666">AI BERKSHIRE · PRO REPORT</div>
+    <h1 style="font-size:26px;margin:10px 0 4px">This Month's Top 3 Undervalued Companies</h1>
+    <div style="color:#666;font-size:13.5px;margin-bottom:22px">${PRO_PICKS.source} · Screened ${PRO_PICKS.updatedAt}</div>
+    <table style="width:100%;border-collapse:collapse">${rows}</table>
+    <p style="font-size:12px;color:#888;margin-top:18px">Prices as of the screen date (${PRO_PICKS.updatedAt}) and may have moved since — verify current quotes before acting. For research purposes only; not investment advice.</p>
+    <p style="margin-top:22px;font-size:14px"><a href="https://aiberkshire.onrender.com" style="color:#111;font-weight:700">Run your own four-lens analysis → aiberkshire.onrender.com</a></p>
+  </div>
+</div>
+</body></html>`;
+}
+
+// Pro专属报告页（网页端查看入口）
+app.get("/picks-report", (req, res) => {
+  const u = getUserFromReq(req);
+  if (!u || u.pro_status !== "active") return res.redirect("/");
+  res.type("html").send(buildPicksReportHtml());
+});
+
+async function sendPicksEmail(email) {
+  if (!mailer) { console.warn("[email] SMTP not configured, skipped for:", email); return false; }
+  try {
+    await mailer.sendMail({ from: SMTP_FROM, to: email, subject: "Your AI Berkshire Pro Picks — Top 3 Undervalued Companies", html: buildPicksReportHtml() });
+    console.log("[email] picks report sent:", email);
+    return true;
+  } catch (e) { console.error("[email] send failed:", email, e.message); return false; }
+}
 
 app.get("/api/portfolio", (req, res) => {
   const u = getUserFromReq(req);
