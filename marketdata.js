@@ -25,6 +25,7 @@ export function mapYahooMeta(ticker, meta) {
   out.price = meta.regularMarketPrice ?? null;
   out.currency = meta.currency ?? null;
   out.previousClose = meta.previousClose ?? meta.chartPreviousClose ?? null;
+  if (meta.longName || meta.shortName) out.profile = { name: meta.longName || meta.shortName };
   if (meta.marketCap != null) out.stats.marketCap = fmtCap(meta.marketCap);
   if (meta.trailingPe != null) out.stats.trailingPE = String(meta.trailingPe);
   if (meta.forwardPe != null) out.stats.forwardPE = String(meta.forwardPe);
