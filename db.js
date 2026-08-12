@@ -44,6 +44,7 @@ db.exec(`
 // 迁移：老库补列（pro_status / paypal_email / orders.paid_at），重复执行忽略错误
 try { db.exec("ALTER TABLE users ADD COLUMN pro_status TEXT NOT NULL DEFAULT 'none'"); } catch {}
 try { db.exec("ALTER TABLE users ADD COLUMN paypal_email TEXT"); } catch {}
+try { db.exec("ALTER TABLE users ADD COLUMN free_used INTEGER NOT NULL DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE orders ADD COLUMN paid_at TEXT"); } catch {}
 
 function hashPassword(pw) {
@@ -86,7 +87,10 @@ export const auth = {
       db.prepare("DELETE FROM sessions WHERE token=?").run(token);
       return null;
     }
-    return db.prepare("SELECT id, email, pro_status, paypal_email FROM users WHERE id=?").get(s.user_id) || null;
+    return db.prepare("SELECT id, email, pro_status, paypal_email, free_used FROM users WHERE id=?").get(s.user_id) || null;
+  },
+  consumeFree(userId) {
+    db.prepare("UPDATE users SET free_used = free_used + 1 WHERE id=?").run(userId);
   },
 };
 
