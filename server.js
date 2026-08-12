@@ -54,6 +54,7 @@ function marketContextText(md) {
   if (!md || (md.price == null && !md.stats.marketCap)) return "(行情接口暂不可用，请基于你的知识分析)";
   const lines = [];
   lines.push(`标的: ${md.symbol}`);
+  if (md.profile?.name) lines.push(`公司名: ${md.profile.name}`);
   if (md.price != null) lines.push(`现价: ${md.price} ${md.currency || ""}`);
   if (md.previousClose != null) lines.push(`昨收: ${md.previousClose}`);
   if (md.stats.marketCap) lines.push(`市值: ${md.stats.marketCap}`);
@@ -106,7 +107,7 @@ async function callLLM(body, label = "llm") {
 }
 
 async function callMaster(master, ticker, marketText) {
-  const user = `Company ticker: ${ticker}\n\nMarket data (best-effort, may be partial):\n${marketText}\n\nProvide your analysis as JSON per your instructions.`;
+  const user = `Company ticker: ${ticker}\n\nMarket data (best-effort, may be partial):\n${marketText}\n\nIMPORTANT: Analyze EXACTLY the company identified by the ticker and company name above. Never substitute a different company with a similar ticker or name (e.g. do not confuse CRWV CoreWeave with CRWD CrowdStrike). If the company is outside your knowledge, base your analysis strictly on the provided market data and state that explicitly.\n\nProvide your analysis as JSON per your instructions.`;
   const body = {
     model: MODEL,
     temperature: 0.7,
@@ -151,9 +152,16 @@ async function synthesize(ticker, analyses) {
 }
 
 // ---------- 路由 ----------
+// 免费档：每个账号限 1 次免费四镜分析，之后必须订阅 Pro
+const FREE_LIMIT = 1;
+
 app.post("/api/analyze", async (req, res) => {
   const rawInput = (req.body?.ticker || "").trim();
   if (!rawInput) return res.status(400).json({ error: "ticker required" });
+  // 免费档门禁：必须登录
+  const user = auth.getUser((req.headers.authorization || "").replace(/^Bearer\s+/i, ""));
+  if (!user) return res.status(401).json({ error: "Sign up / log in to run an analysis", needLogin: true });
+  const isPro = user.pro_status === "active";
   if (!API_KEY) return res.status(500).json({ error: "DASHSCOPE_API_KEY not set" });
 
   // 名称 / 中文 → 代码（零 key：别名表 + Yahoo 搜索兜底）
@@ -169,6 +177,11 @@ app.post("/api/analyze", async (req, res) => {
     return res.json({ ...hit.data, cached: true });
   }
 
+  // 免费额度门禁：非 Pro 且免费次数已用完 → 引导付费（缓存命中不扣额度）
+  if (!isPro && (user.free_used || 0) >= FREE_LIMIT) {
+    return res.status(403).json({ error: "Your free analysis has been used. Upgrade to Pro for unlimited reports.", needPro: true });
+  }
+
   try {
     const market = await fetchMarketData(ticker);
     const marketText = marketContextText(market);
@@ -176,6 +189,7 @@ app.post("/api/analyze", async (req, res) => {
     const synthesized = await synthesize(ticker, analyses);
     const data = { ticker, query: rawInput, marketData: market, analyses, synthesized };
     analysisCache.set(key, { ts: Date.now(), data });
+    if (!isPro) auth.consumeFree(user.id); // 成功生成才扣免费额度
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: "analysis failed", detail: String(e?.message || e) });
@@ -312,7 +326,7 @@ app.post("/api/auth/login", (req, res) => {
 
 app.get("/api/me", (req, res) => {
   const u = getUserFromReq(req);
-  res.json({ user: u ? { email: u.email, pro: u.pro_status === "active" } : null });
+  res.json({ user: u ? { email: u.email, pro: u.pro_status === "active", free_remaining: u.pro_status === "active" ? null : Math.max(0, FREE_LIMIT - (u.free_used || 0)) } : null });
 });
 
 app.get("/api/portfolio", (req, res) => {
