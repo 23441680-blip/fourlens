@@ -329,6 +329,28 @@ app.get("/api/me", (req, res) => {
   res.json({ user: u ? { email: u.email, pro: u.pro_status === "active", free_remaining: u.pro_status === "active" ? null : Math.max(0, FREE_LIMIT - (u.free_used || 0)) } : null });
 });
 
+// ---------- Pro Picks（付费钩子：每月低估值筛选，源自上游AI Berkshire晨星护城河筛选） ----------
+const PRO_PICKS = {
+  updatedAt: "2026-06-07",
+  source: "Morningstar moat screen: fair value / price > 1.5, moat ≥ Narrow, ★★★★★ rated",
+  picks: [
+    { ticker: "ADNT", name: "Adient", hint: "Auto seating leader", upside: "+208%", fairValue: "$69", price: "$22.42", note: "World's largest auto-seat supplier; FY2026 guidance raised while the market overprices short-term industry pressure." },
+    { ticker: "GNTX", name: "Gentex", hint: "Hidden monopoly · 80% global share", upside: "+128%", fairValue: "$57", price: "$24.95", note: "~80% of the global auto-dimming mirror market; 2,600+ patents, some valid through 2050." },
+    { ticker: "ADBE", name: "Adobe", hint: "Undervalued AI stock", upside: "+124%", fairValue: "$560", price: "$250.38", note: "Deep workflow lock-in; revenue +10.5%, ARR +11.5%; Morningstar calls it an undervalued AI stock." }
+  ],
+  teaser: [
+    { hint: "Auto seating leader", upside: "+208%" },
+    { hint: "Hidden monopoly · 80% global share", upside: "+128%" },
+    { hint: "Undervalued AI stock", upside: "+124%" }
+  ]
+};
+app.get("/api/picks", (req, res) => {
+  const u = getUserFromReq(req);
+  if (!u) return res.status(401).json({ error: "Sign up / log in to view", needLogin: true });
+  if (u.pro_status === "active") return res.json({ locked: false, updatedAt: PRO_PICKS.updatedAt, source: PRO_PICKS.source, picks: PRO_PICKS.picks });
+  return res.json({ locked: true, updatedAt: PRO_PICKS.updatedAt, teaser: PRO_PICKS.teaser });
+});
+
 app.get("/api/portfolio", (req, res) => {
   const u = getUserFromReq(req);
   if (!u) return res.status(401).json({ error: "not authenticated" });
