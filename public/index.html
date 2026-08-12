@@ -98,6 +98,19 @@
   .modal .submit{width:100%;margin-top:18px}
   .modal .err{color:var(--bear);font-size:13px;margin-top:10px;min-height:16px}
 
+  .report-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:8px 0 18px}
+  .report-title h2{font-size:26px;letter-spacing:.03em;margin:0}
+  .picks-badge{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;letter-spacing:.02em;color:#fff;background:var(--ink);padding:5px 12px;border-radius:999px;cursor:pointer;text-decoration:none;white-space:nowrap}
+  .picks-badge:hover{opacity:.85}
+  .picks-banner{margin-top:28px;border:2px solid var(--ink);padding:22px 24px;background:#fffdf6}
+  .picks-banner h3{margin:0 0 6px;font-size:18px;letter-spacing:.02em}
+  .picks-banner .pb-sub{color:var(--muted);font-size:13.5px;margin-bottom:14px}
+  .picks-banner .teaser-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px dashed var(--line);font-size:14px}
+  .picks-banner .teaser-row .blur{filter:blur(5px);user-select:none;font-weight:700}
+  .picks-banner .teaser-row .up{color:#1a7f37;font-weight:700;white-space:nowrap}
+  .picks-banner .pb-cta{margin-top:16px}
+  .picks-banner .pb-cta button{background:var(--ink);color:#fff;border:none;padding:11px 22px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.02em}
+  .picks-banner .pb-note{margin-top:10px;font-size:11.5px;color:var(--muted)}
   @media print{
     header,.inputrow,.watch,.loading,.toolbar,.pricing,footer,.savebtn,.modal,.topbar #auth{display:none !important}
     body{background:#fff}
@@ -132,6 +145,10 @@
   <div class="loading" id="loading">Four masters are researching independently — one moment…</div>
 
   <div id="results" style="display:none">
+    <div class="report-title">
+      <h2 id="report-headline">Four-Lens Verdict</h2>
+      <a class="picks-badge" id="picks-badge" href="#picks-banner" style="display:none">⭐ Pro Picks · Top 3 Undervalued</a>
+    </div>
     <div class="market" id="market"></div>
     <div class="toolbar">
       <button id="save">＋ Save to portfolio</button>
@@ -139,6 +156,7 @@
     </div>
     <div class="grid" id="cards"></div>
     <div class="synth" id="synth"></div>
+    <div class="picks-banner" id="picks-banner" style="display:none"></div>
   </div>
 
   <section class="pricing">
@@ -154,7 +172,7 @@
       <div class="plan">
         <div class="t">Pro</div>
         <div class="p">$19<small> / mo</small></div>
-        <ul><li>Unlimited four-lens analysis</li><li>Synthesis + red-flag tracking</li><li>PDF report export</li><li>Portfolio monitoring</li></ul>
+        <ul><li>Unlimited four-lens analysis</li><li><b>Monthly Top-3 undervalued picks</b> (moat screen)</li><li>Synthesis + red-flag tracking</li><li>PDF report export</li><li>Portfolio monitoring</li></ul>
         <button data-plan="pro">Subscribe Pro</button>
       </div>
       <div class="plan">
@@ -300,7 +318,7 @@ async function analyze(){
   try{
     const r = await fetch("/api/analyze",{ method:"POST", headers:{"Content-Type":"application/json", ...(TOKEN?{"Authorization":"Bearer "+TOKEN}:{})}, body: JSON.stringify({ ticker: inputVal }) });
     if(r.status===401){ setTab("signup"); openModal(); toast("Sign up free — includes 1 free four-lens analysis"); return; }
-    if(r.status===403){ document.getElementById("plans").scrollIntoView({behavior:"smooth"}); toast("Free analysis used — upgrade to Pro for unlimited reports"); return; }
+    if(r.status===403){ document.getElementById("plans").scrollIntoView({behavior:"smooth"}); toast("Free analysis used — Pro unlocks unlimited reports + this month's Top 3 undervalued picks"); return; }
     const data = await r.json();
     if(data.error){ toast("Error: "+(data.detail||data.error)); return; }
     // 解析后回填真实代码，便于后续保存组合
@@ -359,8 +377,40 @@ function render(data){
     <p><b>Consensus:</b> ${s.consensus||""}</p>
     <p><b>Divergence / key risk:</b> ${s.divergence||""}</p>
     <div class="take">Actionable takeaway: ${s.actionableTakeaway||""}</div>`;
+  const sym = md.symbol || data.ticker || "";
+  $("#report-headline").textContent = sym ? `Four-Lens Verdict · ${sym}` : "Four-Lens Verdict";
   $("#results").style.display="block";
+  loadPicks();
   window.scrollTo({top:0,behavior:"smooth"});
+}
+
+/* ---------- Pro Picks hook ---------- */
+async function loadPicks(){
+  const banner = $("#picks-banner");
+  try{
+    const r = await fetch("/api/picks", { headers: TOKEN ? {"Authorization":"Bearer "+TOKEN} : {} });
+    if(!r.ok){ banner.style.display="none"; return; }
+    const d = await r.json();
+    if(d.locked){
+      const rows = (d.teaser||[]).map(t=>`<div class="teaser-row"><span><span class="blur">██████</span> · ${t.hint}</span><span class="up">${t.upside} upside</span></div>`).join("");
+      banner.innerHTML = `
+        <h3>🔓 This Month's Pro Screen</h3>
+        <div class="pb-sub">3 moat companies trading 50%+ below fair value — names revealed to Pro members only. Screened ${d.updatedAt||""}.</div>
+        ${rows}
+        <div class="pb-cta"><button onclick="document.getElementById('plans').scrollIntoView({behavior:'smooth'})">Pay now → get the 3 picks instantly ($19/mo)</button></div>
+        <div class="pb-note">Research screen as of ${d.updatedAt||""}; prices may have moved. Not investment advice.</div>`;
+      $("#picks-badge").style.display="inline-flex";
+    } else {
+      const rows = (d.picks||[]).map(p=>`<div class="teaser-row"><span><b>${p.ticker}</b> · ${p.name} — ${p.note}</span><span class="up">${p.upside}</span></div>`).join("");
+      banner.innerHTML = `
+        <h3>⭐ Pro Screen · This Month's Top 3 Undervalued</h3>
+        <div class="pb-sub">${d.source||""} · screened ${d.updatedAt||""}</div>
+        ${rows}
+        <div class="pb-note">Prices as of screen date; verify current quotes before acting. Not investment advice.</div>`;
+      $("#picks-badge").style.display="inline-flex";
+    }
+    banner.style.display="block";
+  }catch(e){ banner.style.display="none"; }
 }
 
 /* ---------- bindings ---------- */
