@@ -99,6 +99,8 @@
   .modal .err{color:var(--bear);font-size:13px;margin-top:10px;min-height:16px}
 
   .report-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:8px 0 18px}
+  .pro-report-link{display:block;max-width:920px;margin:16px auto 0;border:2px solid var(--ink);background:#fffdf6;padding:13px 18px;font-weight:700;text-align:center;color:var(--ink);text-decoration:none;font-size:15px;letter-spacing:.01em}
+  .pro-report-link:hover{background:#fff3cf}
   .report-title h2{font-size:26px;letter-spacing:.03em;margin:0}
   .picks-badge{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;letter-spacing:.02em;color:#fff;background:var(--ink);padding:5px 12px;border-radius:999px;cursor:pointer;text-decoration:none;white-space:nowrap}
   .picks-badge:hover{opacity:.85}
@@ -142,6 +144,7 @@
   </header>
 
   <div class="toast" id="toast"></div>
+  <a id="pro-report-link" class="pro-report-link" href="/picks-report" target="_blank" style="display:none">📬 Your Pro report is ready: This Month's Top 3 Undervalued Picks — View report (also sent to your email)</a>
   <div class="loading" id="loading">Four masters are researching independently — one moment…</div>
 
   <div id="results" style="display:none">
@@ -248,6 +251,8 @@ async function refreshAuth(){
 }
 function renderAuth(){
   const el = $("#auth");
+  const prl = $("#pro-report-link");
+  if(prl) prl.style.display = (ME && ME.pro) ? "block" : "none";
   if(ME){
     el.innerHTML = `<span class="who">${ME.email}</span>${ME.pro?'<span class="badge-pro">PRO</span>':''} <button id="logout" class="mini">Log out</button>`;
     $("#logout").onclick = ()=>{ TOKEN=""; localStorage.removeItem(LS_TOKEN); ME=null; refreshAuth(); toast("Logged out"); };
@@ -406,7 +411,8 @@ async function loadPicks(){
         <h3>⭐ Pro Screen · This Month's Top 3 Undervalued</h3>
         <div class="pb-sub">${d.source||""} · screened ${d.updatedAt||""}</div>
         ${rows}
-        <div class="pb-note">Prices as of screen date; verify current quotes before acting. Not investment advice.</div>`;
+        <div class="pb-cta"><a href="/picks-report" target="_blank"><button>📬 View full report</button></a></div>
+        <div class="pb-note">Prices as of screen date; verify current quotes before acting. Not investment advice. This report was also sent to your registered email.</div>`;
       $("#picks-badge").style.display="inline-flex";
     }
     banner.style.display="block";
@@ -446,7 +452,7 @@ $("#act-btn").addEventListener("click", async ()=>{
   try{
     const r = await fetch("/api/activate",{ method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+TOKEN}, body:JSON.stringify({paypalEmail:email}) });
     const d = await r.json();
-    if(d.ok){ toast("Plan activated — welcome!"); $("#activate").style.display="none"; await refreshAuth(); }
+    if(d.ok){ toast("Pro activated 🎉 Top-3 picks report sent to your email — view it anytime above"); $("#activate").style.display="none"; await refreshAuth(); }
     else toast("Activation failed");
   }catch(e){ toast("Activation error"); }
 });
