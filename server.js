@@ -312,6 +312,21 @@ app.get("/api/admin/payments", (req, res) => {
   res.json({ orders: billing.listOrders() });
 });
 
+// 临时诊断：查看运行实例真实的ADMIN_TOKEN（定位令牌不匹配问题，查完即删）
+app.get("/api/admin/env-debug", (req, res) => {
+  if (req.query.k !== "dbg7788") return res.status(401).json({ error: "unauthorized" });
+  const v = process.env.ADMIN_TOKEN;
+  res.json({
+    exists: "ADMIN_TOKEN" in process.env,
+    len: v ? v.length : null,
+    head: v ? v.slice(0, 8) : null,
+    tail: v ? v.slice(-8) : null,
+    codeLen: ADMIN_TOKEN.length,
+    codeHead: ADMIN_TOKEN.slice(0, 8),
+    adminKeys: Object.keys(process.env).filter(k => k.includes("ADMIN")),
+  });
+});
+
 // 发信中继（Plan C）：Render免费实例SMTP被封，哥老官的Mac每10分钟来取待发邮件，用QQ邮箱代发
 const checkAdmin = (req) => {
   const h = req.headers["authorization"] || "";
