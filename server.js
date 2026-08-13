@@ -255,13 +255,13 @@ app.post("/api/checkout", (req, res) => {
 });
 
 // 用户付款后回填 PayPal 邮箱 → 标记 Pro（MVP 信任制，人工对照 PayPal 记录复核）
-app.post("/api/activate", (req, res) => {
+app.post("/api/activate", async (req, res) => {
   const u = getUserFromReq(req);
   if (!u) return res.status(401).json({ error: "not authenticated" });
   const { paypalEmail } = req.body || {};
   billing.activate(u.id, paypalEmail);
-  sendPicksEmail(u.email); // 激活即发送本月Top 3低估值筛选报告到注册邮箱
-  res.json({ ok: true, pro: true });
+  const mail = await sendPicksEmail(u.email); // 激活即发送本月Top 3低估值筛选报告到注册邮箱
+  res.json({ ok: true, pro: true, emailed: mail.ok, emailError: mail.error || null });
 });
 
 // PayPal IPN：客户付款后 PayPal 主动 POST 通知 → 标记订单已付 + 自动激活 Pro
@@ -401,12 +401,12 @@ app.get("/picks-report", (req, res) => {
 });
 
 async function sendPicksEmail(email) {
-  if (!mailer) { console.warn("[email] SMTP not configured, skipped for:", email); return false; }
+  if (!mailer) { console.warn("[email] SMTP not configured, skipped for:", email); return { ok: false, error: "SMTP not configured (SMTP_USER/SMTP_PASS missing?)" }; }
   try {
     await mailer.sendMail({ from: SMTP_FROM, to: email, subject: "Your AI Berkshire Pro Picks — Top 3 Undervalued Companies", html: buildPicksReportHtml() });
     console.log("[email] picks report sent:", email);
-    return true;
-  } catch (e) { console.error("[email] send failed:", email, e.message); return false; }
+    return { ok: true };
+  } catch (e) { console.error("[email] send failed:", email, e.message); return { ok: false, error: e.message }; }
 }
 
 app.get("/api/portfolio", (req, res) => {
