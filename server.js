@@ -389,8 +389,8 @@ app.get("/api/picks", (req, res) => {
 
 // ---------- Picks报告页 + 邮件送达 ----------
 // 发信三通道：①BREVO_API_KEY（HTTP API，免费300封/天，首选）②SENDGRID_API_KEY ③SMTP备用（Render免费实例SMTP端口被封，仅作本地/其他环境备用）
-const BREVO_API_KEY = proces…_KEY || "";
-const SENDGRID_API_KEY = proces…_KEY || "";
+const BREVO_API_KEY = process.env.BREVO_API_KEY || "";
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || "";
 const SMTP_USER = process.env.SMTP_USER || "";
 const SMTP_PASS = process.env.SMTP_PASS || "";
 const SMTP_HOST = process.env.SMTP_HOST || "smtp.qq.com";
