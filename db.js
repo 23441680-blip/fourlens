@@ -39,6 +39,12 @@ db.exec(`
     paid_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS mail_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    sent_at TEXT
+  );
 `);
 
 // 迁移：老库补列（pro_status / paypal_email / orders.paid_at），重复执行忽略错误
@@ -131,5 +137,22 @@ export const billing = {
     return db.prepare(
       "SELECT o.order_id, o.user_id, o.plan, o.status, o.paypal_email AS order_paypal, o.created_at, o.paid_at, u.email AS user_email, u.pro_status FROM orders o LEFT JOIN users u ON u.id=o.user_id ORDER BY o.created_at DESC"
     ).all();
+  },
+};
+
+// 发信队列：Render免费实例SMTP被封，排队由哥老官Mac的QQ邮箱中继代发（Plan C）
+export const mailQueue = {
+  add(email) {
+    const pending = db.prepare("SELECT id FROM mail_queue WHERE email=? AND sent_at IS NULL").get(email);
+    if (pending) return pending.id; // 已有未发任务，不重复排队
+    const r = db.prepare("INSERT INTO mail_queue(email) VALUES (?)").run(email);
+    return Number(r.lastInsertRowid);
+  },
+  pending(limit = 50) {
+    return db.prepare("SELECT id, email, created_at FROM mail_queue WHERE sent_at IS NULL ORDER BY id LIMIT ?").all(limit);
+  },
+  markSent(ids) {
+    const stmt = db.prepare("UPDATE mail_queue SET sent_at=datetime('now') WHERE id=?");
+    for (const id of ids) stmt.run(id);
   },
 };
