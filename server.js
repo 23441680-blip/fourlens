@@ -358,22 +358,25 @@ app.get("/api/picks", (req, res) => {
 });
 
 // ---------- Picks报告页 + 邮件送达 ----------
-// 发信双通道：①SENDGRID_API_KEY（HTTP API，Render免费实例必用，SMTP端口被封）②SMTP备用
+// 发信三通道：①BREVO_API_KEY（HTTP API，免费300封/天，首选）②SENDGRID_API_KEY ③SMTP备用（Render免费实例SMTP端口被封，仅作本地/其他环境备用）
+const BREVO_API_KEY = proces…_KEY || "";
 const SENDGRID_API_KEY = proces…_KEY || "";
 const SMTP_USER = process.env.SMTP_USER || "";
 const SMTP_PASS = process.env.SMTP_PASS || "";
 const SMTP_HOST = process.env.SMTP_HOST || "smtp.qq.com";
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const SMTP_FROM = process.env.SMTP_FROM || (SMTP_USER ? `AI Berkshire <${SMTP_USER}>` : "");
-const MAIL_FROM_EMAIL = SENDGRID_API_KEY ? (process.env.MAIL_FROM_EMAIL || SMTP_USER || "23441680@qq.com") : SMTP_USER;
+const MAIL_FROM_EMAIL = (BREVO_API_KEY || SENDGRID_API_KEY) ? (process.env.MAIL_FROM_EMAIL || SMTP_USER || "23441680@qq.com") : SMTP_USER;
 let mailer = null;
-if (SENDGRID_API_KEY) {
+if (BREVO_API_KEY) {
+  console.log("[email] Brevo HTTP mode enabled, from:", MAIL_FROM_EMAIL);
+} else if (SENDGRID_API_KEY) {
   console.log("[email] SendGrid HTTP mode enabled, from:", MAIL_FROM_EMAIL);
 } else if (SMTP_USER && SMTP_PASS) {
   mailer = nodemailer.createTransport({ host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_PORT === 465, connectionTimeout: 10000, auth: { user: SMTP_USER, pass: SMTP_PASS } });
   console.log("[email] SMTP configured:", SMTP_HOST, SMTP_USER);
 } else {
-  console.warn("[email] No email channel (set SENDGRID_API_KEY or SMTP_USER/SMTP_PASS) — report emails disabled");
+  console.warn("[email] No email channel (set BREVO_API_KEY / SENDGRID_API_KEY / SMTP) — report emails disabled");
 }
 
 function buildPicksReportHtml() {
@@ -408,7 +411,26 @@ app.get("/picks-report", (req, res) => {
 async function sendPicksEmail(email) {
   const subject = "Your AI Berkshire Pro Picks — Top 3 Undervalued Companies";
   const html = buildPicksReportHtml();
-  // 通道①：SendGrid HTTP API（Render免费实例唯一可行路线）
+  // 通道①：Brevo HTTP API（免费300封/天，首选）
+  if (BREVO_API_KEY) {
+    try {
+      const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({
+          sender: { name: "AI Berkshire", email: MAIL_FROM_EMAIL },
+          to: [{ email }],
+          subject,
+          htmlContent: html,
+        }),
+      });
+      if (r.status >= 200 && r.status < 300) { console.log("[email] Brevo sent:", email); return { ok: true }; }
+      const errTxt = await r.text().catch(() => "");
+      console.error("[email] Brevo failed:", r.status, errTxt.slice(0, 200));
+      return { ok: false, error: `Brevo HTTP ${r.status}: ${errTxt.slice(0, 150)}` };
+    } catch (e) { console.error("[email] Brevo error:", e.message); return { ok: false, error: e.message }; }
+  }
+  // 通道②：SendGrid HTTP API
   if (SENDGRID_API_KEY) {
     try {
       const r = await fetch("https://api.sendgrid.com/v3/mail/send", {
