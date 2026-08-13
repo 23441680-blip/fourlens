@@ -324,6 +324,10 @@ app.get("/api/admin/env-debug", (req, res) => {
     codeLen: ADMIN_TOKEN.length,
     codeHead: ADMIN_TOKEN.slice(0, 8),
     adminKeys: Object.keys(process.env).filter(k => k.includes("ADMIN")),
+    recvAuth: JSON.stringify(req.headers.authorization || null),
+    recvLen: (req.headers.authorization || "").length,
+    recvHex: Buffer.from(req.headers.authorization || "").toString("hex").slice(0, 40),
+    matchResult: (req.headers.authorization || "") === "Bearer " + ADMIN_TOKEN,
   });
 });
 
