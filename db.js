@@ -1,15 +1,22 @@
-// db.js — 内置 SQLite（node:sqlite），零额外服务，账号 + 组合监控
-import { DatabaseSync } from "node:sqlite";
+// db.js — 存储层：优先 Turso 云数据库（libsql），无凭据时回退本地 SQLite，零数据丢失风险
+import Database from "libsql";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = process.env.DB_PATH || join(__dirname, "data", "fourlens.db");
-mkdirSync(dirname(DB_PATH), { recursive: true });
 
-const db = new DatabaseSync(DB_PATH);
+let db;
+if (process.env.TURSO_URL && process.env.TURSO_TOKEN) {
+  // 生产：Turso 云数据库（Render 免费实例重启不丢数据）
+  db = new Database(process.env.TURSO_URL, { authToken: process.env.TURSO_TOKEN });
+} else {
+  // 本地开发回退
+  const DB_PATH = process.env.DB_PATH || join(__dirname, "data", "fourlens.db");
+  mkdirSync(dirname(DB_PATH), { recursive: true });
+  db = new Database(DB_PATH);
+}
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
