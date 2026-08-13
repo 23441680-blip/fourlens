@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import nodemailer from "nodemailer";
 import { MASTERS, SYNTH_PROMPT } from "./prompts.js";
 import { makeMarketDataFetcher, resolveSymbol, diagnoseMarket } from "./marketdata.js";
-import { auth, portfolio, billing } from "./db.js";
+import { auth, portfolio, billing, mailQueue } from "./db.js";
 
 // 零依赖加载 .env（Node 不自动加载，这里手写；已存在的环境变量不被覆盖）
 try {
@@ -260,7 +260,9 @@ app.post("/api/activate", async (req, res) => {
   if (!u) return res.status(401).json({ error: "not authenticated" });
   const { paypalEmail } = req.body || {};
   billing.activate(u.id, paypalEmail);
-  const mail = await sendPicksEmail(u.email); // 激活即发送本月Top 3低估值筛选报告到注册邮箱
+  mailQueue.add(u.email); // 先排队（Mac中继兵底），能直发就直发并销队
+  const mail = await sendPicksEmail(u.email);
+  if (mail.ok) mailQueue.markSent([mailQueue.add(u.email)]);
   res.json({ ok: true, pro: true, emailed: mail.ok, emailError: mail.error || null });
 });
 
@@ -281,7 +283,12 @@ app.post("/api/paypal-ipn", (req, res) => {
     console.log("[IPN] markPaid", orderId, o ? "OK" : "ORDER_NOT_FOUND");
     if (o) {
       const bu = auth.getUserById(o.user_id);
-      if (bu) sendPicksEmail(bu.email); // PayPal自动激活后发报告到注册邮箱
+      if (bu) {
+        mailQueue.add(bu.email); // PayPal自动激活：先排队Mac中继，能直发就直发
+        sendPicksEmail(bu.email).then((mail) => {
+          if (mail.ok) mailQueue.markSent([mailQueue.add(bu.email)]);
+        });
+      }
     }
   };
   if (!IPN_VERIFY) { finish(true); return; } // 本地测试跳过真 PayPal 验证
@@ -303,6 +310,29 @@ app.get("/api/admin/payments", (req, res) => {
   const tok = h.startsWith("Bearer ") ? h.slice(7) : null;
   if (tok !== ADMIN_TOKEN) return res.status(401).json({ error: "unauthorized" });
   res.json({ orders: billing.listOrders() });
+});
+
+// 发信中继（Plan C）：Render免费实例SMTP被封，哥老官的Mac每10分钟来取待发邮件，用QQ邮箱代发
+const checkAdmin = (req) => {
+  const h = req.headers["authorization"] || "";
+  const tok = h.startsWith("Bearer ") ? h.slice(7) : (req.query.token || null);
+  return tok === ADMIN_TOKEN;
+};
+app.get("/api/admin/mail-pending", (req, res) => {
+  if (!checkAdmin(req)) return res.status(401).json({ error: "unauthorized" });
+  const items = mailQueue.pending();
+  res.json({
+    from: MAIL_FROM_EMAIL || SMTP_USER || "23441680@qq.com",
+    subject: "Your AI Berkshire Pro Picks — Top 3 Undervalued Companies",
+    html: buildPicksReportHtml(),
+    items,
+  });
+});
+app.post("/api/admin/mail-sent", (req, res) => {
+  if (!checkAdmin(req)) return res.status(401).json({ error: "unauthorized" });
+  const ids = (req.body && req.body.ids) || [];
+  mailQueue.markSent(ids);
+  res.json({ ok: true, marked: ids.length });
 });
 
 // ---------- 账号 / 组合监控（SQLite） ----------
