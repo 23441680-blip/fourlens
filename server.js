@@ -358,17 +358,22 @@ app.get("/api/picks", (req, res) => {
 });
 
 // ---------- Picks报告页 + 邮件送达 ----------
+// 发信双通道：①SENDGRID_API_KEY（HTTP API，Render免费实例必用，SMTP端口被封）②SMTP备用
+const SENDGRID_API_KEY = proces…_KEY || "";
 const SMTP_USER = process.env.SMTP_USER || "";
 const SMTP_PASS = process.env.SMTP_PASS || "";
 const SMTP_HOST = process.env.SMTP_HOST || "smtp.qq.com";
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const SMTP_FROM = process.env.SMTP_FROM || (SMTP_USER ? `AI Berkshire <${SMTP_USER}>` : "");
+const MAIL_FROM_EMAIL = SENDGRID_API_KEY ? (process.env.MAIL_FROM_EMAIL || SMTP_USER || "23441680@qq.com") : SMTP_USER;
 let mailer = null;
-if (SMTP_USER && SMTP_PASS) {
-  mailer = nodemailer.createTransport({ host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_PORT === 465, auth: { user: SMTP_USER, pass: SMTP_PASS } });
+if (SENDGRID_API_KEY) {
+  console.log("[email] SendGrid HTTP mode enabled, from:", MAIL_FROM_EMAIL);
+} else if (SMTP_USER && SMTP_PASS) {
+  mailer = nodemailer.createTransport({ host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_PORT === 465, connectionTimeout: 10000, auth: { user: SMTP_USER, pass: SMTP_PASS } });
   console.log("[email] SMTP configured:", SMTP_HOST, SMTP_USER);
 } else {
-  console.warn("[email] SMTP not configured (set SMTP_USER/SMTP_PASS) — report emails disabled");
+  console.warn("[email] No email channel (set SENDGRID_API_KEY or SMTP_USER/SMTP_PASS) — report emails disabled");
 }
 
 function buildPicksReportHtml() {
@@ -401,9 +406,31 @@ app.get("/picks-report", (req, res) => {
 });
 
 async function sendPicksEmail(email) {
-  if (!mailer) { console.warn("[email] SMTP not configured, skipped for:", email); return { ok: false, error: "SMTP not configured (SMTP_USER/SMTP_PASS missing?)" }; }
+  const subject = "Your AI Berkshire Pro Picks — Top 3 Undervalued Companies";
+  const html = buildPicksReportHtml();
+  // 通道①：SendGrid HTTP API（Render免费实例唯一可行路线）
+  if (SENDGRID_API_KEY) {
+    try {
+      const r = await fetch("https://api.sendgrid.com/v3/mail/send", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${SENDGRID_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email }] }],
+          from: { email: MAIL_FROM_EMAIL, name: "AI Berkshire" },
+          subject,
+          content: [{ type: "text/html", value: html }],
+        }),
+      });
+      if (r.status >= 200 && r.status < 300) { console.log("[email] SendGrid sent:", email); return { ok: true }; }
+      const errTxt = await r.text().catch(() => "");
+      console.error("[email] SendGrid failed:", r.status, errTxt.slice(0, 200));
+      return { ok: false, error: `SendGrid HTTP ${r.status}: ${errTxt.slice(0, 150)}` };
+    } catch (e) { console.error("[email] SendGrid error:", e.message); return { ok: false, error: e.message }; }
+  }
+  // 通道②：SMTP备用
+  if (!mailer) { console.warn("[email] no channel, skipped for:", email); return { ok: false, error: "No email channel configured" }; }
   try {
-    await mailer.sendMail({ from: SMTP_FROM, to: email, subject: "Your AI Berkshire Pro Picks — Top 3 Undervalued Companies", html: buildPicksReportHtml() });
+    await mailer.sendMail({ from: SMTP_FROM, to: email, subject, html });
     console.log("[email] picks report sent:", email);
     return { ok: true };
   } catch (e) { console.error("[email] send failed:", email, e.message); return { ok: false, error: e.message }; }
