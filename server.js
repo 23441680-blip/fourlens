@@ -18,6 +18,18 @@ try {
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// 预览环境标识：仅当 IS_PREVIEW=true（Render preview 服务环境变量）时在首页顶部注入细横幅
+const IS_PREVIEW = process.env.IS_PREVIEW === "true";
+const PREVIEW_BANNER = `<div id="preview-banner" style="position:fixed;top:0;left:0;right:0;z-index:99;background:#b45309;color:#fff;text-align:center;font-size:12px;letter-spacing:.14em;padding:4px 10px;font-family:Arial,Helvetica,sans-serif;">PREVIEW · 测试环境</div>`;
+app.get("/", (req, res, next) => {
+  if (!IS_PREVIEW) return next();
+  try {
+    const html = readFileSync(new URL("./public/index.html", import.meta.url), "utf8");
+    res.type("html").send(html.replace("<body>", "<body>" + PREVIEW_BANNER));
+  } catch (e) { next(); }
+});
+
 app.use(express.static("public"));
 
 const DASHSCOPE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
@@ -333,6 +345,12 @@ app.post("/api/admin/mail-sent", (req, res) => {
   const ids = (req.body && req.body.ids) || [];
   mailQueue.markSent(ids);
   res.json({ ok: true, marked: ids.length });
+});
+
+// 邮件列表沉淀（EDM导出用）：返回所有注册用户 [{email, created_at, pro}]
+app.get("/api/admin/subscribers", (req, res) => {
+  if (!checkAdmin(req)) return res.status(401).json({ error: "unauthorized" });
+  res.json(auth.listSubscribers());
 });
 
 // ---------- 账号 / 组合监控（SQLite） ----------
