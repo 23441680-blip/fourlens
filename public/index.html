@@ -71,6 +71,9 @@
   .synth .take{background:#fff;color:var(--ink);padding:14px;border-left:3px solid var(--bull);font-style:italic}
 
   footer{margin-top:48px;border-top:1px solid #ccc;padding-top:18px;color:var(--muted);font-size:12px}
+  .report-disclaimer{font-size:11.5px;color:var(--muted);margin:-8px 0 14px;font-style:italic}
+  .pricing-footnote{margin-top:14px;font-size:12px;color:var(--muted)}
+  .modal-disclaimer{margin-top:14px;font-size:11px;color:var(--muted);line-height:1.5}
 
   .pricing{margin-top:56px;border-top:2px solid var(--line);padding-top:28px}
   .pricing h2{font-size:24px;letter-spacing:.04em;margin-bottom:8px}
@@ -149,9 +152,10 @@
 
   <div id="results" style="display:none">
     <div class="report-title">
-      <h2 id="report-headline">Four-Lens Verdict</h2>
+      <h2 id="report-headline">Four-Lens Assessment</h2>
       <a class="picks-badge" id="picks-badge" href="#picks-banner" style="display:none">⭐ Pro Picks · Top 3 Undervalued</a>
     </div>
+    <div class="report-disclaimer">Four-lens framework signals for study purposes — not buy/sell recommendations.</div>
     <div class="market" id="market"></div>
     <div class="toolbar">
       <button id="save">＋ Save to portfolio</button>
@@ -193,10 +197,12 @@
       </div>
       <div class="hint">Activation is instant; our team manually verifies your PayPal payment afterward. Single payment per cycle.</div>
     </div>
+    <div class="pricing-footnote">7-day refund guarantee · Support: 23441680@qq.com</div>
   </section>
 
   <footer>
-    Disclaimer: AI BERKSHIRE output is a demonstration of investment methodology and a research framework — not investment advice or a solicitation. Investing involves risk; do your own research and decisions.
+    For research and education only. Not investment advice.（仅供研究学习，不构成投资建议）
+    <br/>Disclaimer: AI BERKSHIRE output is a demonstration of investment methodology and a research framework — not investment advice or a solicitation. Investing involves risk; do your own research and decisions.
     <br/>AI BERKSHIRE is an independent research tool and is not affiliated with, endorsed by, or connected to Berkshire Hathaway Inc.
     <br/>AI BERKSHIRE · Four-Master Value Research · Powered by Alibaba DashScope (Qwen).
   </footer>
@@ -215,6 +221,7 @@
     <input type="password" id="m-pass" placeholder="min 6 characters" />
     <button class="submit" id="m-submit">Create account</button>
     <div class="err" id="m-err"></div>
+    <div class="modal-disclaimer">For research and education only. Not investment advice.（仅供研究学习，不构成投资建议）</div>
   </div>
 </div>
 
@@ -383,7 +390,7 @@ function render(data){
     <p><b>Divergence / key risk:</b> ${s.divergence||""}</p>
     <div class="take">Actionable takeaway: ${s.actionableTakeaway||""}</div>`;
   const sym = md.symbol || data.ticker || "";
-  $("#report-headline").textContent = sym ? `Four-Lens Verdict · ${sym}` : "Four-Lens Verdict";
+  $("#report-headline").textContent = sym ? `Four-Lens Assessment · ${sym}` : "Four-Lens Assessment";
   $("#results").style.display="block";
   loadPicks();
   window.scrollTo({top:0,behavior:"smooth"});
