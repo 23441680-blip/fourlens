@@ -49,8 +49,28 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS mail_queue (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL,
+    subject TEXT,
+    html TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     sent_at TEXT
+  );
+  CREATE TABLE IF NOT EXISTS analysis_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    ticker TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    ticker TEXT NOT NULL,
+    query TEXT,
+    status TEXT NOT NULL DEFAULT 'generating',
+    email_sent_at TEXT,
+    error TEXT,
+    data TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT
   );
 `);
 
@@ -59,6 +79,16 @@ try { db.exec("ALTER TABLE users ADD COLUMN pro_status TEXT NOT NULL DEFAULT 'no
 try { db.exec("ALTER TABLE users ADD COLUMN paypal_email TEXT"); } catch {}
 try { db.exec("ALTER TABLE users ADD COLUMN free_used INTEGER NOT NULL DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE orders ADD COLUMN paid_at TEXT"); } catch {}
+
+// 幂等补列：PRAGMA table_info 检查，缺列才 ALTER（CREATE TABLE IF NOT EXISTS 不会给已存在的表加列；
+// 本地 SQLite 与生产 Turso/libsql 均支持 PRAGMA table_info）
+function ensureColumn(table, col, type) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+}
+// 两段式完整报告需要把邮件内容落库（Render 无发信通道时由 Mac 中继按内容代发）
+ensureColumn("mail_queue", "subject", "TEXT");
+ensureColumn("mail_queue", "html", "TEXT");
 
 function hashPassword(pw) {
   const salt = randomBytes(16).toString("hex");
@@ -147,16 +177,57 @@ export const billing = {
   },
 };
 
+// 分析用量：Pro 每月（自然月）配额核算的依据
+export const usage = {
+  log(userId, ticker) {
+    db.prepare("INSERT INTO analysis_log(user_id, ticker) VALUES (?,?)").run(userId, ticker || "");
+  },
+  countMonth(userId) {
+    const r = db.prepare(
+      "SELECT COUNT(*) AS n FROM analysis_log WHERE user_id=? AND strftime('%Y-%m', created_at) = strftime('%Y-%m','now')"
+    ).get(userId);
+    return r ? Number(r.n) : 0;
+  },
+};
+
+// 两段式报告：摘要秒回 → 完整报告异步落库 + 邮件送达
+export const reports = {
+  create(userId, ticker, query) {
+    const r = db.prepare("INSERT INTO reports(user_id, ticker, query) VALUES (?,?,?)").run(userId, ticker, query || null);
+    return Number(r.lastInsertRowid);
+  },
+  attach(id, data) {
+    db.prepare("UPDATE reports SET data=?, updated_at=datetime('now') WHERE id=?").run(JSON.stringify(data), id);
+  },
+  setStatus(id, status, error = null) {
+    if (status === "sent") {
+      db.prepare("UPDATE reports SET status=?, error=?, email_sent_at=datetime('now'), updated_at=datetime('now') WHERE id=?").run(status, error, id);
+    } else {
+      db.prepare("UPDATE reports SET status=?, error=?, updated_at=datetime('now') WHERE id=?").run(status, error, id);
+    }
+  },
+  get(id) {
+    return db.prepare("SELECT * FROM reports WHERE id=?").get(id) || null;
+  },
+};
+
 // 发信队列：Render免费实例SMTP被封，排队由哥老官Mac的QQ邮箱中继代发（Plan C）
+// 队列项可自带 subject/html（两段式完整报告）；不带内容的旧式项由中继用 picks 固定内容兜底
 export const mailQueue = {
-  add(email) {
-    const pending = db.prepare("SELECT id FROM mail_queue WHERE email=? AND sent_at IS NULL").get(email);
-    if (pending) return pending.id; // 已有未发任务，不重复排队
-    const r = db.prepare("INSERT INTO mail_queue(email) VALUES (?)").run(email);
+  add(email, opts = {}) {
+    const subject = opts.subject || null;
+    const html = opts.html || null;
+    if (!subject && !html) {
+      // 旧式无内容项：同邮箱已有未发任务则复用（保持 picks 双通道"先排队、直发成功即销队"语义）
+      const pending = db.prepare("SELECT id FROM mail_queue WHERE email=? AND sent_at IS NULL").get(email);
+      if (pending) return pending.id;
+    }
+    // 带内容项是独立的一封邮件，始终新建行
+    const r = db.prepare("INSERT INTO mail_queue(email, subject, html) VALUES (?,?,?)").run(email, subject, html);
     return Number(r.lastInsertRowid);
   },
   pending(limit = 50) {
-    return db.prepare("SELECT id, email, created_at FROM mail_queue WHERE sent_at IS NULL ORDER BY id LIMIT ?").all(limit);
+    return db.prepare("SELECT id, email, subject, html, created_at FROM mail_queue WHERE sent_at IS NULL ORDER BY id LIMIT ?").all(limit);
   },
   markSent(ids) {
     const stmt = db.prepare("UPDATE mail_queue SET sent_at=datetime('now') WHERE id=?");

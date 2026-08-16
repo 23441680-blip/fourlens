@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import nodemailer from "nodemailer";
 import { MASTERS, SYNTH_PROMPT } from "./prompts.js";
 import { makeMarketDataFetcher, resolveSymbol, diagnoseMarket } from "./marketdata.js";
-import { auth, portfolio, billing, mailQueue } from "./db.js";
+import { auth, portfolio, billing, mailQueue, usage, reports } from "./db.js";
 
 // 零依赖加载 .env（Node 不自动加载，这里手写；已存在的环境变量不被覆盖）
 try {
@@ -155,6 +155,57 @@ async function synthesize(ticker, analyses) {
 // ---------- 路由 ----------
 // 免费档：每个账号限 1 次免费四镜分析，之后必须订阅 Pro
 const FREE_LIMIT = 1;
+// Pro 档：每月（自然月）20 次四镜分析
+const PRO_MONTH_LIMIT = 20;
+
+// 摘要负载：两段式报告第一段（verdict/总分/四镜各一句话），完整版异步进邮箱
+function summaryPayload(data) {
+  const s = data.synthesized || {};
+  return {
+    ticker: data.ticker,
+    query: data.query,
+    marketData: data.marketData,
+    summary: {
+      overallVerdict: s.overallVerdict || null,
+      overallConviction: s.overallConviction ?? null,
+      consensus: s.consensus || "",
+      divergence: s.divergence || "",
+      actionableTakeaway: s.actionableTakeaway || "",
+      lenses: (data.analyses || []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        error: !!a.error,
+        verdict: a.verdict || null,
+        conviction: a.conviction ?? null,
+        oneLiner: a.oneLiner || (a.error ? "(analysis temporarily unavailable)" : ""),
+      })),
+    },
+  };
+}
+
+// 完整报告后台异步：渲染 HTML → 双通道送达（先带内容入队兜底 → 尝试直发 → 成功则销队）
+// 生产 Render 封 SMTP/无 HTTP 发信通道 → 直发失败保持 queued，由 Mac 中继按队列内容代发
+function finalizeReportAsync(reportId, user, data) {
+  setImmediate(async () => {
+    try {
+      const html = buildFullReportHtml(data);
+      const subject = `Your AI Berkshire Four-Lens Full Report · ${data.ticker}`;
+      const qid = mailQueue.add(user.email, { subject, html }); // 先入队（内容落库，中继兜底）
+      const r = await sendHtmlEmail(user.email, subject, html); // 再尝试直发
+      if (r.ok) {
+        mailQueue.markSent([qid]);
+        reports.setStatus(reportId, "sent");
+        console.log("[report] full report emailed:", user.email, "id:", reportId);
+      } else {
+        reports.setStatus(reportId, "queued"); // 直发不可用/失败 → 队列保留，Mac 中继稍后代发
+        console.log("[report] direct send unavailable, queued for relay:", user.email, "id:", reportId, "·", r.error || "");
+      }
+    } catch (e) {
+      reports.setStatus(reportId, "failed", String(e?.message || e).slice(0, 300));
+      console.error("[report] finalize error:", e);
+    }
+  });
+}
 
 app.post("/api/analyze", async (req, res) => {
   const rawInput = (req.body?.ticker || "").trim();
@@ -163,7 +214,15 @@ app.post("/api/analyze", async (req, res) => {
   const user = auth.getUser((req.headers.authorization || "").replace(/^Bearer\s+/i, ""));
   if (!user) return res.status(401).json({ error: "Sign up / log in to run an analysis", needLogin: true });
   const isPro = user.pro_status === "active";
-  if (!API_KEY) return res.status(500).json({ error: "DASHSCOPE_API_KEY not set" });
+  if (!API_KEY) return res.status(500).json({ error: "Analysis engine not configured" });
+
+  // Pro 月度配额门禁：当月 ≥ 20 次 → 403 quotaExceeded
+  if (isPro && usage.countMonth(user.id) >= PRO_MONTH_LIMIT) {
+    return res.status(403).json({
+      code: "quotaExceeded",
+      error: "Monthly limit reached — your 20 analyses refresh on the 1st of next month",
+    });
+  }
 
   // 名称 / 中文 → 代码（零 key：别名表 + Yahoo 搜索兜底）
   const resolved = await resolveSymbol(rawInput);
@@ -172,15 +231,20 @@ app.post("/api/analyze", async (req, res) => {
   }
   const ticker = resolved;
 
-  const key = `${ticker}:${MODEL}`;
-  const hit = analysisCache.get(key);
-  if (hit && Date.now() - hit.ts < CACHE_TTL) {
-    return res.json({ ...hit.data, cached: true });
+  // 免费额度门禁：非 Pro 且免费次数已用完 → 引导付费
+  if (!isPro && (user.free_used || 0) >= FREE_LIMIT) {
+    return res.status(403).json({ code: "freeUsedUp", error: "Your free analysis has been used. Upgrade to Pro for 20 reports per month.", needPro: true });
   }
 
-  // 免费额度门禁：非 Pro 且免费次数已用完 → 引导付费（缓存命中不扣额度）
-  if (!isPro && (user.free_used || 0) >= FREE_LIMIT) {
-    return res.status(403).json({ error: "Your free analysis has been used. Upgrade to Pro for unlimited reports.", needPro: true });
+  const key = `${ticker}:${MODEL}`;
+  const hit = analysisCache.get(key);
+  const reportId = reports.create(user.id, ticker, rawInput);
+
+  // 缓存命中：摘要秒回，完整报告直接走异步发信
+  if (hit && Date.now() - hit.ts < CACHE_TTL) {
+    reports.attach(reportId, hit.data);
+    finalizeReportAsync(reportId, user, hit.data);
+    return res.json({ ...summaryPayload(hit.data), reportId, cached: true });
   }
 
   try {
@@ -190,10 +254,45 @@ app.post("/api/analyze", async (req, res) => {
     const synthesized = await synthesize(ticker, analyses);
     const data = { ticker, query: rawInput, marketData: market, analyses, synthesized };
     analysisCache.set(key, { ts: Date.now(), data });
+    usage.log(user.id, ticker); // 全量记录用量（Pro 月度配额核算依据）
     if (!isPro) auth.consumeFree(user.id); // 成功生成才扣免费额度
-    res.json(data);
+    reports.attach(reportId, data);
+    finalizeReportAsync(reportId, user, data); // 完整版后台异步 + 邮件，不阻塞摘要返回
+    res.json({ ...summaryPayload(data), reportId });
   } catch (e) {
+    reports.setStatus(reportId, "failed", String(e?.message || e).slice(0, 300));
     res.status(500).json({ error: "analysis failed", detail: String(e?.message || e) });
+  }
+});
+
+// 报告状态轮询（摘要返回后前端每 3s 查一次，最多 3 分钟）
+app.get("/api/report-status", (req, res) => {
+  const u = getUserFromReq(req);
+  if (!u) return res.status(401).json({ error: "not authenticated" });
+  const id = Number(req.query.id);
+  const r = Number.isFinite(id) && id > 0 ? reports.get(id) : null;
+  if (!r || r.user_id !== u.id) return res.status(404).json({ error: "report not found" });
+  res.json({
+    id: r.id,
+    ticker: r.ticker,
+    status: r.status, // generating | sent | queued | failed
+    email: u.email,
+    emailConfigured: !!(mailer || BREVO_API_KEY || SENDGRID_API_KEY),
+    error: r.error || null,
+  });
+});
+
+// 页面内查看完整报告（邮件未配置/发送失败时的降级入口）
+app.get("/api/report", (req, res) => {
+  const u = getUserFromReq(req);
+  if (!u) return res.status(401).json({ error: "not authenticated" });
+  const id = Number(req.query.id);
+  const r = Number.isFinite(id) && id > 0 ? reports.get(id) : null;
+  if (!r || r.user_id !== u.id || !r.data) return res.status(404).json({ error: "report not found" });
+  try {
+    res.json(JSON.parse(r.data));
+  } catch {
+    res.status(500).json({ error: "report data corrupted" });
   }
 });
 
@@ -219,12 +318,12 @@ app.get("/api/diag", async (req, res) => {
 //   2) PAYPAL_PAYMENT_URL=https://paypal.me/你的账号 → 旧式拼接金额
 const PAYPAL_EMAIL = (process.env.PAYPAL_EMAIL || "").trim();
 const PAYPAL_BASE = (process.env.PAYPAL_PAYMENT_URL || "").replace(/\/$/, "");
-const PLAN_PRICE = { pro: 19, team: 49 };
-const PLAN_NAME = { pro: "AI Berkshire Pro", team: "AI Berkshire Team" };
+const PLAN_PRICE = { pro: 19 };
+const PLAN_NAME = { pro: "AI Berkshire Pro" };
 app.post("/api/checkout", (req, res) => {
   const u = getUserFromReq(req);
   if (!u) return res.status(401).json({ error: "not authenticated" });
-  const plan = req.body?.plan === "team" ? "team" : "pro";
+  const plan = "pro";
   const price = PLAN_PRICE[plan];
   if (!PAYPAL_EMAIL && !PAYPAL_BASE) {
     return res.json({ ok: false, message: `PayPal 收款未配置（在 .env 填 PAYPAL_EMAIL=你的收款邮箱）。套餐：${price} USD/月。` });
@@ -320,7 +419,8 @@ const checkAdmin = (req) => {
 };
 app.get("/api/admin/mail-pending", (req, res) => {
   if (!checkAdmin(req)) return res.status(401).json({ error: "unauthorized" });
-  const items = mailQueue.pending();
+  const items = mailQueue.pending(); // 每项自带 subject/html（新版完整报告）或为 null（旧式picks项）
+  // 端点级 subject/html 为旧式无内容项的 picks 兜底内容（向后兼容，勿动每月picks推送）
   res.json({
     from: MAIL_FROM_EMAIL || SMTP_USER || "23441680@qq.com",
     subject: "Your AI Berkshire Pro Picks — Top 3 Undervalued Companies",
@@ -362,7 +462,17 @@ app.post("/api/auth/login", (req, res) => {
 
 app.get("/api/me", (req, res) => {
   const u = getUserFromReq(req);
-  res.json({ user: u ? { email: u.email, pro: u.pro_status === "active", free_remaining: u.pro_status === "active" ? null : Math.max(0, FREE_LIMIT - (u.free_used || 0)) } : null });
+  if (!u) return res.json({ user: null });
+  const isPro = u.pro_status === "active";
+  res.json({
+    user: {
+      email: u.email,
+      pro: isPro,
+      free_remaining: isPro ? null : Math.max(0, FREE_LIMIT - (u.free_used || 0)),
+      pro_used: isPro ? usage.countMonth(u.id) : null,
+      pro_limit: PRO_MONTH_LIMIT,
+    },
+  });
 });
 
 // ---------- Pro Picks（付费钩子：每月低估值筛选，源自上游AI Berkshire晨星护城河筛选） ----------
@@ -439,8 +549,11 @@ app.get("/picks-report", (req, res) => {
 });
 
 async function sendPicksEmail(email) {
-  const subject = "Your AI Berkshire Pro Picks — Top 3 Undervalued Companies";
-  const html = buildPicksReportHtml();
+  return sendHtmlEmail(email, "Your AI Berkshire Pro Picks — Top 3 Undervalued Companies", buildPicksReportHtml());
+}
+
+// 通用发信：Brevo HTTP → SendGrid HTTP → SMTP（本地 465 SSL）
+async function sendHtmlEmail(email, subject, html) {
   // 通道①：Brevo HTTP API（免费300封/天，首选）
   if (BREVO_API_KEY) {
     try {
@@ -479,13 +592,89 @@ async function sendPicksEmail(email) {
       return { ok: false, error: `SendGrid HTTP ${r.status}: ${errTxt.slice(0, 150)}` };
     } catch (e) { console.error("[email] SendGrid error:", e.message); return { ok: false, error: e.message }; }
   }
-  // 通道②：SMTP备用
+  // 通道③：SMTP（本地 QQ 邮箱 465 SSL；Render 免费实例端口被封时走上面的中继队列）
   if (!mailer) { console.warn("[email] no channel, skipped for:", email); return { ok: false, error: "No email channel configured" }; }
   try {
     await mailer.sendMail({ from: SMTP_FROM, to: email, subject, html });
-    console.log("[email] picks report sent:", email);
+    console.log("[email] sent:", email, "·", subject);
     return { ok: true };
   } catch (e) { console.error("[email] send failed:", email, e.message); return { ok: false, error: e.message }; }
+}
+
+// ---------- 完整四镜报告邮件（两段式第二段：各镜详细全文 + 红旗追踪） ----------
+function buildFullReportHtml(data) {
+  const esc = (x) => String(x ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const s = data.synthesized || {};
+  const md = data.marketData || {};
+  const st = md.stats || {};
+  const vc = { Bullish: "#c0392b", Bearish: "#27ae60", Neutral: "#7f8c8d", Hold: "#7f8c8d" };
+  const marketRows = [
+    ["Price", md.price != null ? `${md.price} ${md.currency || ""}`.trim() : "—"],
+    ["Market Cap", st.marketCap || "—"],
+    ["P/E (TTM)", st.trailingPE || "—"],
+    ["Fwd P/E", st.forwardPE || "—"],
+    ["PEG", st.pegRatio || "—"],
+    ["Div Yield", st.dividendYield || "—"],
+    ["52W Range", st.fiftyTwoWeekLow && st.fiftyTwoWeekHigh ? `${st.fiftyTwoWeekLow} ~ ${st.fiftyTwoWeekHigh}` : "—"],
+    ["1Y Target", st.oneYearTarget || "—"],
+    ["Sector", md.profile?.sector || "—"],
+  ].map(([k, v]) => `<td style="padding:7px 12px 7px 0;font-size:13px;vertical-align:top"><span style="color:#666;font-size:11px;text-transform:uppercase;letter-spacing:.08em;display:block">${esc(k)}</span><b style="font-size:14px">${esc(v)}</b></td>`).join("");
+
+  const masterCards = (data.analyses || []).map((a) => {
+    const color = vc[a.verdict] || "#7f8c8d";
+    if (a.error) {
+      return `<div style="border:2px solid #111;background:#fff;padding:20px;margin-top:16px">
+        <div style="font-size:17px;font-weight:700">${esc(a.name || "")}</div>
+        <div style="color:#666;font-size:12px;margin:4px 0 10px;border-bottom:1px solid #ddd;padding-bottom:8px">analysis temporarily unavailable</div>
+      </div>`;
+    }
+    const flags = (a.redFlags || []).map((f) => `<li style="margin:3px 0;font-size:13.5px">${esc(f)}</li>`).join("") || "<li style='font-size:13.5px'>—</li>";
+    return `<div style="border:2px solid #111;background:#fff;padding:22px;margin-top:16px">
+      <table style="width:100%"><tr>
+        <td style="font-size:17px;font-weight:700;padding:0">${esc(a.name || "")}</td>
+        <td style="text-align:right;padding:0"><span style="border:1px solid ${color};color:${color};font-size:11px;font-weight:700;padding:3px 10px;letter-spacing:.06em">${esc(a.verdict || "")}</span></td>
+      </tr></table>
+      <div style="font-size:12px;color:#666;margin:6px 0 12px;border-bottom:1px solid #ddd;padding-bottom:8px">Conviction ${esc(a.conviction ?? "—")}/100</div>
+      <div style="font-size:14px;line-height:1.55"><b style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#666;display:block;margin-bottom:2px">Thesis</b>${esc(a.thesis || "")}</div>
+      <div style="font-size:14px;line-height:1.55;margin-top:10px"><b style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#666;display:block;margin-bottom:2px">Strongest point</b>${esc(a.keyStrength || "")}</div>
+      <div style="font-size:14px;line-height:1.55;margin-top:10px"><b style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#666;display:block;margin-bottom:2px">Biggest weakness</b>${esc(a.keyWeakness || "")}</div>
+      <div style="margin-top:10px"><b style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#666;display:block;margin-bottom:2px">Red flags</b><ul style="margin:2px 0 0;padding-left:18px">${flags}</ul></div>
+      <div style="font-size:14px;line-height:1.55;margin-top:10px"><b style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#666;display:block;margin-bottom:2px">What would change my mind</b>${esc(a.whatWouldChangeMind || "")}</div>
+      <div style="margin-top:12px;padding:10px 12px;background:#f3f3f3;border-left:3px solid #111;font-style:italic;font-size:13.5px">“${esc(a.oneLiner || "")}”</div>
+    </div>`;
+  }).join("");
+
+  const sc = vc[s.overallVerdict] || "#7f8c8d";
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI Berkshire · Four-Lens Full Report · ${esc(data.ticker)}</title></head>
+<body style="margin:0;background:#fafafa;font-family:Georgia,'Times New Roman',serif;color:#111">
+<div style="max-width:780px;margin:0 auto;padding:36px 20px">
+  <div style="border-bottom:2px solid #111;padding-bottom:14px">
+    <div style="font-size:22px;font-weight:700;letter-spacing:.16em">AI BERKSHIRE</div>
+    <div style="color:#666;font-size:13px;margin-top:4px">Four-Lens Full Report · Buffett · Munger · Klarman · Marks</div>
+  </div>
+  <div style="border:2px solid #111;background:#fff;padding:24px;margin-top:20px">
+    <span style="display:inline-block;border:2px solid #111;padding:4px 18px;font-weight:700;letter-spacing:.14em;font-size:15px">${esc(s.overallVerdict || "—")}</span>
+    <span style="color:#666;font-size:13px">&nbsp;&nbsp;Composite score</span>
+    <div style="font-size:34px;font-weight:700;margin:8px 0 2px">${esc(s.overallConviction ?? "—")}<span style="font-size:16px;color:#666"> / 100</span></div>
+    <div style="font-size:15px;color:#333;margin-top:6px;font-style:italic">“${esc(s.actionableTakeaway || "")}”</div>
+    <div style="font-size:13.5px;margin-top:12px;color:#333"><b>Consensus:</b> ${esc(s.consensus || "—")}</div>
+    <div style="font-size:13.5px;margin-top:6px;color:#333"><b>Divergence / key risk:</b> ${esc(s.divergence || "—")}</div>
+    <div style="margin-top:14px;border-top:1px solid #ddd;padding-top:12px"><table style="border-collapse:collapse"><tr>${marketRows}</tr></table></div>
+  </div>
+  <h2 style="font-size:13px;letter-spacing:.14em;text-transform:uppercase;margin:30px 0 0;color:#111">The Four Masters · Full Analyses</h2>
+  ${masterCards}
+  <div style="margin-top:26px;border:2px solid #111;background:#111;color:#fff;padding:24px">
+    <h3 style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#bbb;margin:0 0 12px">Editor's Synthesis · Overall: <span style="color:${sc}">${esc(s.overallVerdict || "—")}</span> (${esc(s.overallConviction ?? "—")}/100)</h3>
+    <p style="margin:0 0 12px;font-size:15px"><b>Consensus:</b> ${esc(s.consensus || "")}</p>
+    <p style="margin:0 0 12px;font-size:15px"><b>Divergence / key risk:</b> ${esc(s.divergence || "")}</p>
+    <div style="background:#fff;color:#111;padding:14px;border-left:3px solid #c0392b;font-style:italic;font-size:14.5px">Actionable takeaway: ${esc(s.actionableTakeaway || "")}</div>
+  </div>
+  <div style="margin-top:30px;border-top:1px solid #ccc;padding-top:16px;color:#666;font-size:11.5px;line-height:1.6">
+    Disclaimer: AI BERKSHIRE output is a demonstration of investment methodology and a research framework — not investment advice or a solicitation. Investing involves risk; do your own research and decisions.<br/>
+    AI BERKSHIRE is an independent research tool and is not affiliated with, endorsed by, or connected to Berkshire Hathaway Inc.
+  </div>
+</div>
+</body></html>`;
 }
 
 app.get("/api/portfolio", (req, res) => {

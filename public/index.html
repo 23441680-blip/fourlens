@@ -17,7 +17,7 @@
   .brand{font-size:34px;font-weight:700;letter-spacing:.16em}
   .tagline{color:var(--muted);font-size:14px;margin-top:6px;letter-spacing:.02em}
   .topbar{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
-  .inputrow{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;flex:1;min-width:260px}
+  .inputrow{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;flex:1;min-width:260px;position:relative}
   input[type=text]{flex:1;min-width:200px;padding:14px 16px;font-size:18px;
     border:2px solid var(--line);background:#fff;border-radius:0;font-family:inherit;color:var(--ink);text-transform:uppercase;}
   input[type=text]:focus{outline:none;box-shadow:4px 4px 0 var(--ink)}
@@ -29,6 +29,34 @@
   .who{font-size:13px;font-weight:700}
   .badge-pro{font-size:11px;font-weight:700;padding:2px 8px;border:1px solid var(--ink);background:var(--ink);color:#fff;margin-left:6px;letter-spacing:.06em}
   .hint{color:var(--muted);font-size:12px;margin-top:8px}
+  .quota-hint{font-size:12.5px;color:var(--muted);margin-top:6px}
+  .quota-hint b{color:var(--ink)}
+
+  /* ticker autocomplete dropdown */
+  .ac-box{position:absolute;top:100%;left:0;right:120px;background:#fff;border:2px solid var(--line);
+    box-shadow:6px 6px 0 rgba(17,17,17,.9);z-index:40;margin-top:6px;display:none}
+  .ac-item{padding:11px 16px;border-bottom:1px solid #e2e2e2;display:flex;justify-content:space-between;align-items:baseline;cursor:pointer;gap:12px}
+  .ac-item.hot{background:#f0f0f0}
+  .ac-tk{font-weight:700;font-size:16px;letter-spacing:.06em;white-space:nowrap}
+  .ac-tk b{background:#ffe9a8;font-weight:700;padding:0 1px}
+  .ac-name{color:var(--muted);font-size:13px;text-align:right}
+  .ac-hint{padding:8px 16px;font-size:12px;color:var(--muted);border-top:2px solid var(--line);margin-top:-1px}
+
+  /* two-stage report: summary card + email banner */
+  .summary-card{border:2px solid var(--line);background:#fff;padding:26px 30px;margin-top:22px}
+  .summary-card .verdict{display:inline-block;border:2px solid var(--line);padding:4px 18px;font-weight:700;letter-spacing:.14em;font-size:15px}
+  .summary-card .score{font-size:34px;font-weight:700;margin:10px 0 2px}
+  .summary-card .score small{font-size:16px;color:var(--muted);font-weight:400}
+  .summary-card .oneliner{font-size:15px;color:#333;margin-top:4px;padding:0;background:none;border:none;font-style:italic}
+  .lens-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 26px;margin-top:18px;border-top:1px solid #ddd;padding-top:16px}
+  @media(max-width:760px){.lens-grid{grid-template-columns:1fr}}
+  .lens-grid .lens{font-size:13.5px}
+  .lens-grid .who{font-weight:700;letter-spacing:.05em}
+  .lens-grid .take{color:var(--muted)}
+  .email-banner{border:2px solid var(--line);background:var(--ink);color:#fff;padding:13px 20px;margin-top:14px;font-size:14.5px}
+  .email-banner small{color:#bbb;display:block;font-size:12px;margin-top:2px}
+  .email-banner a{color:#ffe9a8;font-weight:700}
+  .email-banner button{padding:8px 16px;font-size:13px;margin-top:8px}
 
   .watch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px}
   .watch .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
@@ -75,7 +103,7 @@
   .pricing{margin-top:56px;border-top:2px solid var(--line);padding-top:28px}
   .pricing h2{font-size:24px;letter-spacing:.04em;margin-bottom:8px}
   .pricing .sub{color:var(--muted);font-size:14px;margin-bottom:24px}
-  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .plans{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;max-width:760px}
   @media(max-width:760px){.plans{grid-template-columns:1fr}}
   .plan{border:2px solid var(--line);padding:22px;background:#fff;display:flex;flex-direction:column}
   .plan .t{font-size:18px;font-weight:700}
@@ -114,7 +142,7 @@
   .picks-banner .pb-cta button{background:var(--ink);color:#fff;border:none;padding:11px 22px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.02em}
   .picks-banner .pb-note{margin-top:10px;font-size:11.5px;color:var(--muted)}
   @media print{
-    header,.inputrow,.watch,.loading,.toolbar,.pricing,footer,.savebtn,.modal,.topbar #auth{display:none !important}
+    header,.inputrow,.watch,.loading,.toolbar,.pricing,footer,.savebtn,.modal,.topbar #auth,#summary-section{display:none !important}
     body{background:#fff}
     .card,.synth{border-color:#000;break-inside:avoid}
     .synth{background:#fff;color:#000}
@@ -134,10 +162,12 @@
       <span id="auth"></span>
     </div>
     <div class="inputrow">
-      <input type="text" id="ticker" placeholder="Enter a ticker or name — e.g. AAPL / 苹果 / BRK.B / NVDA" />
+      <input type="text" id="ticker" placeholder="Enter a ticker or name — e.g. AAPL / 苹果 / BRK.B / NVDA" autocomplete="off" />
       <button id="go">Run AI Berkshire Analysis</button>
+      <div class="ac-box" id="ac-box"></div>
     </div>
     <div class="hint">Tip: enter a ticker (AAPL, BRK.B) or a company name in English/Chinese (苹果, 英伟达) — we auto-resolve it. Data from public feeds; analysis is methodology, not advice. Log in to sync your portfolio across devices.</div>
+    <div class="quota-hint" id="quota-hint" style="display:none"></div>
     <div class="watch" id="watch">
       <span class="lbl">Portfolio</span>
     </div>
@@ -146,6 +176,12 @@
   <div class="toast" id="toast"></div>
   <a id="pro-report-link" class="pro-report-link" href="/picks-report" target="_blank" style="display:none">📬 Your Pro report is ready: This Month's Top 3 Undervalued Picks — View report (also sent to your email)</a>
   <div class="loading" id="loading">Four masters are researching independently — one moment…</div>
+
+  <section id="summary-section" style="display:none">
+    <div class="market" id="summary-market"></div>
+    <div class="summary-card" id="summary-card"></div>
+    <div class="email-banner" id="email-banner" style="display:none"></div>
+  </section>
 
   <div id="results" style="display:none">
     <div class="report-title">
@@ -175,14 +211,8 @@
       <div class="plan">
         <div class="t">Pro</div>
         <div class="p">$19<small> / mo</small></div>
-        <ul><li>Unlimited four-lens analysis</li><li><b>Monthly Top-3 undervalued picks</b> (moat screen)</li><li>Synthesis + red-flag tracking</li><li>PDF report export</li><li>Portfolio monitoring</li></ul>
+        <ul><li><b>20 four-lens analyses per month</b></li><li><b>Monthly Top-3 undervalued picks</b> (moat screen)</li><li>Synthesis + red-flag tracking</li><li>PDF report export</li><li>Portfolio monitoring</li></ul>
         <button data-plan="pro">Subscribe Pro</button>
-      </div>
-      <div class="plan">
-        <div class="t">Team</div>
-        <div class="p">$49<small> / mo</small></div>
-        <ul><li>Everything in Pro</li><li>5 seats</li><li>API access <em>(coming soon)</em></li><li>Custom lenses <em>(coming soon)</em></li></ul>
-        <button data-plan="team">Subscribe Team</button>
       </div>
     </div>
     <div id="activate" style="display:none;margin-top:22px;border:1px dashed var(--line);padding:18px;background:#fff">
@@ -198,7 +228,6 @@
   <footer>
     Disclaimer: AI BERKSHIRE output is a demonstration of investment methodology and a research framework — not investment advice or a solicitation. Investing involves risk; do your own research and decisions.
     <br/>AI BERKSHIRE is an independent research tool and is not affiliated with, endorsed by, or connected to Berkshire Hathaway Inc.
-    <br/>AI BERKSHIRE · Four-Master Value Research · Powered by Alibaba DashScope (Qwen).
   </footer>
 </div>
 
@@ -241,6 +270,138 @@ async function api(path, opts={}){
   if(opts.body) headers["Content-Type"] = "application/json";
   return fetch(path, { method: opts.method||"GET", headers, body: opts.body });
 }
+function escHtml(s){ return String(s ?? "").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+/* ---------- ticker autocomplete (static list: US large caps + hot China ADRs) ---------- */
+const AC_RAW = [
+["AAPL","Apple Inc.","苹果"],["MSFT","Microsoft","微软"],["GOOGL","Alphabet (Google)","谷歌"],["GOOG","Alphabet (Google) C","谷歌"],
+["AMZN","Amazon","亚马逊"],["NVDA","NVIDIA","英伟达"],["META","Meta Platforms",""],["TSLA","Tesla","特斯拉"],
+["BRK.B","Berkshire Hathaway","伯克希尔"],["AVGO","Broadcom","博通"],["ORCL","Oracle","甲骨文"],["ADBE","Adobe",""],
+["CRM","Salesforce",""],["CSCO","Cisco","思科"],["ACN","Accenture","埃森哲"],["IBM","IBM",""],
+["INTC","Intel","英特尔"],["AMD","Advanced Micro Devices","超威半导体"],["QCOM","Qualcomm","高通"],["TXN","Texas Instruments","德州仪器"],
+["MU","Micron Technology","美光"],["AMAT","Applied Materials","应用材料"],["LRCX","Lam Research","泛林集团"],["KLAC","KLA Corporation",""],
+["SNPS","Synopsys","新思科技"],["CDNS","Cadence Design","楷登电子"],["ASML","ASML Holding","阿斯麦"],["TSM","TSMC (ADR)","台积电"],
+["ARM","Arm Holdings",""],["MRVL","Marvell Technology","迈威尔"],["ON","ON Semiconductor","安森美"],["SWKS","Skyworks Solutions",""],
+["MCHP","Microchip Technology","微芯科技"],["MPWR","Monolithic Power",""],["ANET","Arista Networks",""],["PANW","Palo Alto Networks",""],
+["CRWD","CrowdStrike",""],["ZS","Zscaler",""],["FTNT","Fortinet",""],["SNOW","Snowflake",""],
+["DDOG","Datadog",""],["NET","Cloudflare",""],["PLTR","Palantir",""],["NOW","ServiceNow",""],
+["INTU","Intuit",""],["SHOP","Shopify",""],["XYZ","Block (Square)",""],["PYPL","PayPal","贝宝"],
+["COIN","Coinbase",""],["HOOD","Robinhood",""],["SOFI","SoFi Technologies",""],["IBKR","Interactive Brokers","盈透证券"],
+["UBER","Uber","优步"],["LYFT","Lyft",""],["ABNB","Airbnb","爱彼迎"],["BKNG","Booking Holdings",""],
+["DASH","DoorDash",""],["DKNG","DraftKings",""],["ZM","Zoom Video",""],["WDAY","Workday",""],
+["TEAM","Atlassian",""],["MDB","MongoDB",""],["OKTA","Okta",""],["TWLO","Twilio",""],
+["U","Unity Software",""],["PATH","UiPath",""],["APP","AppLovin",""],["RDDT","Reddit",""],
+["DUOL","Duolingo","多邻国"],["DELL","Dell Technologies","戴尔"],["HPQ","HP Inc.","惠普"],["SMCI","Super Micro Computer","超微电脑"],
+["RIVN","Rivian",""],["LCID","Lucid Motors",""],["IONQ","IonQ",""],["VST","Vistra Corp",""],
+["CEG","Constellation Energy",""],["JPM","JPMorgan Chase","摩根大通"],["V","Visa","维萨"],["MA","Mastercard","万事达"],
+["AXP","American Express","美国运通"],["BAC","Bank of America","美国银行"],["WFC","Wells Fargo","富国银行"],["C","Citigroup","花旗"],
+["GS","Goldman Sachs","高盛"],["MS","Morgan Stanley","摩根士丹利"],["BLK","BlackRock","贝莱德"],["SCHW","Charles Schwab","嘉信理财"],
+["USB","U.S. Bancorp",""],["PNC","PNC Financial",""],["TFC","Truist Financial",""],["SPGI","S&P Global","标普全球"],
+["ICE","Intercontinental Exchange",""],["CME","CME Group","芝加哥商品交易所"],["MCO","Moody's","穆迪"],["MSCI","MSCI",""],
+["COF","Capital One",""],["DFS","Discover Financial",""],["UNH","UnitedHealth","联合健康"],["JNJ","Johnson & Johnson","强生"],
+["LLY","Eli Lilly","礼来"],["ABBV","AbbVie","艾伯维"],["MRK","Merck","默沙东"],["PFE","Pfizer","辉瑞"],
+["TMO","Thermo Fisher","赛默飞"],["ABT","Abbott Labs","雅培"],["DHR","Danaher","丹纳赫"],["BMY","Bristol-Myers Squibb","百时美施贵宝"],
+["AMGN","Amgen","安进"],["GILD","Gilead Sciences","吉利德"],["VRTX","Vertex Pharma",""],["REGN","Regeneron","再生元"],
+["ISRG","Intuitive Surgical",""],["SYK","Stryker","史赛克"],["BDX","Becton Dickinson",""],["CI","Cigna Group","信诺"],
+["CVS","CVS Health",""],["HCA","HCA Healthcare",""],["ZTS","Zoetis","硕腾"],["MRNA","Moderna","莫德纳"],
+["BNTX","BioNTech (ADR)","拜恩泰科"],["XOM","ExxonMobil","埃克森美孚"],["CVX","Chevron","雪佛龙"],["COP","ConocoPhillips","康菲石油"],
+["EOG","EOG Resources",""],["SLB","Schlumberger","斯伦贝谢"],["MPC","Marathon Petroleum",""],["PSX","Phillips 66",""],
+["VLO","Valero Energy",""],["OXY","Occidental Petroleum","西方石油"],["DVN","Devon Energy",""],["FANG","Diamondback Energy",""],
+["HAL","Halliburton","哈里伯顿"],["CAT","Caterpillar","卡特彼勒"],["DE","Deere & Company","迪尔"],["HON","Honeywell","霍尼韦尔"],
+["GE","GE Aerospace","通用电气"],["MMM","3M Company",""],["BA","Boeing","波音"],["UPS","UPS","联合包裹"],
+["FDX","FedEx","联邦快递"],["UNP","Union Pacific","联合太平洋"],["CSX","CSX Corp",""],["NSC","Norfolk Southern",""],
+["LMT","Lockheed Martin","洛克希德马丁"],["RTX","RTX Corp","雷神"],["NOC","Northrop Grumman","诺斯罗普格鲁曼"],["GD","General Dynamics","通用动力"],
+["EMR","Emerson Electric","艾默生"],["ETN","Eaton Corp","伊顿"],["ITW","Illinois Tool Works",""],["PH","Parker Hannifin","派克汉尼汾"],
+["TDG","TransDigm Group",""],["FAST","Fastenal",""],["CTAS","Cintas",""],["WM","Waste Management",""],
+["RSG","Republic Services",""],["CPRT","Copart",""],["TT","Trane Technologies",""],["CARR","Carrier Global","开利"],
+["OTIS","Otis Worldwide","奥的斯"],["TEL","TE Connectivity","泰科电子"],["GLW","Corning","康宁"],["WMT","Walmart","沃尔玛"],
+["COST","Costco","好市多"],["HD","Home Depot","家得宝"],["LOW","Lowe's","劳氏"],["TGT","Target","塔吉特"],
+["TJX","TJX Companies",""],["ROST","Ross Stores",""],["ORLY","O'Reilly Automotive",""],["AZO","AutoZone",""],
+["DG","Dollar General","达乐"],["DLTR","Dollar Tree","美元树"],["NKE","Nike","耐克"],["LULU","Lululemon","露露乐蒙"],
+["SBUX","Starbucks","星巴克"],["MCD","McDonald's","麦当劳"],["CMG","Chipotle",""],["YUM","Yum! Brands","百胜餐饮"],
+["PG","Procter & Gamble","宝洁"],["KO","Coca-Cola","可口可乐"],["PEP","PepsiCo","百事"],["MDLZ","Mondelez","亿滋"],
+["KHC","Kraft Heinz","卡夫亨氏"],["GIS","General Mills","通用磨坊"],["HSY","Hershey","好时"],["KMB","Kimberly-Clark","金佰利"],
+["CL","Colgate-Palmolive","高露洁"],["EL","Estée Lauder","雅诗兰黛"],["MNST","Monster Beverage","怪物饮料"],["STZ","Constellation Brands","星座品牌"],
+["DECK","Deckers Outdoor",""],["DIS","Walt Disney","迪士尼"],["NFLX","Netflix","奈飞"],["CMCSA","Comcast","康卡斯特"],
+["T","AT&T","美国电话电报"],["VZ","Verizon","威瑞森"],["TMUS","T-Mobile",""],["CHTR","Charter Communications",""],
+["EA","Electronic Arts","艺电"],["TTWO","Take-Two Interactive",""],["RBLX","Roblox",""],["SPOT","Spotify","声田"],
+["OMC","Omnicom Group","宏盟"],["NYT","New York Times","纽约时报"],["LIN","Linde plc","林德"],["APD","Air Products & Chemicals","空气产品"],
+["SHW","Sherwin-Williams","宣伟"],["ECL","Ecolab","艺康"],["DD","DuPont","杜邦"],["FCX","Freeport-McMoRan","自由港麦克莫兰"],
+["NEM","Newmont Corp","纽蒙特"],["NUE","Nucor","纽柯钢铁"],["STLD","Steel Dynamics",""],["NEE","NextEra Energy","新纪元能源"],
+["DUK","Duke Energy","杜克能源"],["SO","Southern Company",""],["AEP","American Electric Power",""],["D","Dominion Energy",""],
+["AMT","American Tower",""],["PLD","Prologis","普洛斯"],["CCI","Crown Castle",""],["EQIX","Equinix",""],
+["O","Realty Income",""],["SPG","Simon Property","西蒙地产"],["WELL","Welltower",""],["PSA","Public Storage",""],
+["BABA","Alibaba","阿里巴巴"],["PDD","PDD Holdings (Pinduoduo)","拼多多"],["BIDU","Baidu","百度"],["JD","JD.com","京东"],
+["TCEHY","Tencent (ADR)","腾讯"],["NTES","NetEase","网易"],["BILI","Bilibili","哔哩哔哩"],["TME","Tencent Music","腾讯音乐"],
+["NIO","NIO Inc.","蔚来"],["LI","Li Auto","理想汽车"],["XPEV","XPeng","小鹏汽车"],["ZTO","ZTO Express","中通快递"],
+["BEKE","KE Holdings","贝壳找房"],["TAL","TAL Education","好未来"],["IQ","iQIYI","爱奇艺"],["WB","Weibo","微博"],
+["TIGR","UP Fintech (Tiger)","老虎证券"],["GDS","GDS Holdings","万国数据"],["VNET","VNET Group","世纪互联"],["HTHT","H World Group","华住集团"],
+["YUMC","Yum China","百胜中国"]
+];
+const AC_DATA = AC_RAW.map(([t,n,z])=>({t,n,z:z||""}));
+// 热门优先级（同分匹配时常用票优先，保证 "AP" → AAPL 排首）
+const AC_HOT_RANK = {AAPL:0,MSFT:1,NVDA:2,TSLA:3,AMZN:4,GOOGL:5,META:6,"BRK.B":7,PDD:8,BABA:9,BILI:10,NIO:11,JD:12,TCEHY:13};
+let acItems = [], acOpen = false, acHot = -1;
+function acSearch(q){
+  q = q.trim().toLowerCase();
+  if(!q) return [];
+  const out = [];
+  for(const it of AC_DATA){
+    const tk = it.t.toLowerCase(), nm = it.n.toLowerCase();
+    let tier = -1;
+    if(tk === q) tier = 0;               // 精确命中 → 永远第一
+    else if(tk.startsWith(q)) tier = 1;  // 代码前缀 / 包含同组，热门票优先（“AP”→AAPL）
+    else if(tk.includes(q)) tier = 1;
+    else if(nm.startsWith(q)) tier = 2;
+    else if(nm.includes(q)) tier = 3;
+    else if(it.z && it.z.includes(q.trim())) tier = 4;
+    if(tier >= 0){
+      const group = tier === 0 ? 0 : (tier === 1 ? 1 : tier);
+      out.push([group, AC_HOT_RANK[it.t] ?? 50, tier, it.t.length, it]);
+    }
+  }
+  out.sort((a,b)=> a[0]-b[0] || a[1]-b[1] || a[2]-b[2] || a[3]-b[3]);
+  return out.slice(0,8).map(x=>x[4]);
+}
+function hlTicker(t, q){
+  const i = t.toLowerCase().indexOf(q.toLowerCase());
+  if(i < 0 || !q) return escHtml(t);
+  return escHtml(t.slice(0,i)) + "<b>" + escHtml(t.slice(i,i+q.length)) + "</b>" + escHtml(t.slice(i+q.length));
+}
+function renderAc(list, q){
+  const box = $("#ac-box");
+  acItems = list; acHot = list.length ? 0 : -1;
+  if(!list.length){ closeAc(); return; }
+  box.innerHTML = "";
+  list.forEach((it,i)=>{
+    const d = document.createElement("div");
+    d.className = "ac-item" + (i===0 ? " hot" : "");
+    d.innerHTML = `<span class="ac-tk">${hlTicker(it.t,q)}</span><span class="ac-name">${escHtml(it.n)}${it.z ? " · "+escHtml(it.z) : ""}</span>`;
+    d.addEventListener("mousedown",(e)=>{ e.preventDefault(); pickAc(it); });
+    box.appendChild(d);
+  });
+  const hint = document.createElement("div");
+  hint.className = "ac-hint";
+  hint.textContent = "↑↓ 选择 · Enter 确认 · 支持代码 / 英文名 / 中文名（如 苹果、英伟达）";
+  box.appendChild(hint);
+  box.style.display = "block"; acOpen = true;
+}
+function closeAc(){ const box = $("#ac-box"); box.style.display = "none"; box.innerHTML = ""; acItems = []; acHot = -1; acOpen = false; }
+function updateAcHot(){
+  document.querySelectorAll("#ac-box .ac-item").forEach((el,i)=> el.classList.toggle("hot", i===acHot));
+  const hot = document.querySelector("#ac-box .ac-item.hot");
+  if(hot) hot.scrollIntoView({ block:"nearest" });
+}
+function pickAc(it){
+  $("#ticker").value = it.t;
+  closeAc();
+  analyze();
+}
+function onTickerInput(){
+  const v = $("#ticker").value.trim();
+  if(!v){ closeAc(); return; }
+  renderAc(acSearch(v), v);
+}
 
 /* ---------- auth ---------- */
 async function refreshAuth(){
@@ -253,6 +414,13 @@ function renderAuth(){
   const el = $("#auth");
   const prl = $("#pro-report-link");
   if(prl) prl.style.display = (ME && ME.pro) ? "block" : "none";
+  const qh = $("#quota-hint");
+  if(ME && ME.pro && ME.pro_used != null){
+    const limit = ME.pro_limit || 20;
+    const left = Math.max(0, limit - ME.pro_used);
+    qh.innerHTML = `本月剩余 <b>${left}/${limit}</b> 次`;
+    qh.style.display = "block";
+  } else if(qh){ qh.style.display = "none"; }
   if(ME){
     el.innerHTML = `<span class="who">${ME.email}</span>${ME.pro?'<span class="badge-pro">PRO</span>':''} <button id="logout" class="mini">Log out</button>`;
     $("#logout").onclick = ()=>{ TOKEN=""; localStorage.removeItem(LS_TOKEN); ME=null; refreshAuth(); toast("Logged out"); };
@@ -313,17 +481,28 @@ async function removeWatch(t){
   else { setWatch(getWatch().filter(x=>x!==t)); }
 }
 
-/* ---------- analysis ---------- */
+/* ---------- analysis (two-stage: summary first, full report by email) ---------- */
+let REPORT_TIMER = null;
 async function analyze(){
   const inputVal = $("#ticker").value.trim();
   if(!inputVal){ toast("Enter a ticker or company name"); return; }
+  closeAc();
+  if(REPORT_TIMER){ clearInterval(REPORT_TIMER); REPORT_TIMER = null; }
   $("#go").disabled = true;
+  $("#summary-section").style.display = "none";
+  $("#email-banner").style.display = "none";
   $("#results").style.display = "none";
   $("#loading").classList.add("show");
   try{
     const r = await fetch("/api/analyze",{ method:"POST", headers:{"Content-Type":"application/json", ...(TOKEN?{"Authorization":"Bearer "+TOKEN}:{})}, body: JSON.stringify({ ticker: inputVal }) });
     if(r.status===401){ setTab("signup"); openModal(); toast("Sign up free — includes 1 free four-lens analysis"); return; }
-    if(r.status===403){ document.getElementById("plans").scrollIntoView({behavior:"smooth"}); toast("Free analysis used — Pro unlocks unlimited reports + this month's Top 3 undervalued picks"); return; }
+    if(r.status===403){
+      const d = await r.json().catch(()=>({}));
+      document.getElementById("plans").scrollIntoView({behavior:"smooth"});
+      if(d.code === "quotaExceeded") toast("Monthly limit reached — your 20 analyses refresh on the 1st of next month");
+      else toast("Free analysis used — Pro unlocks 20 reports/month + this month's Top 3 undervalued picks");
+      return;
+    }
     const data = await r.json();
     if(data.error){ toast("Error: "+(data.detail||data.error)); return; }
     // 解析后回填真实代码，便于后续保存组合
@@ -331,27 +510,101 @@ async function analyze(){
     if(data.query && data.ticker && data.query.trim().toLowerCase() !== data.ticker.toLowerCase()){
       toast(`识别为 ${data.ticker}`);
     }
-    render(data);
+    renderSummary(data);
+    startReportPolling(data.reportId);
+    refreshAuth(); // 刷新配额显示
   }catch(e){ toast("Request failed: "+e.message); }
   finally{ $("#loading").classList.remove("show"); $("#go").disabled=false; }
 }
-function render(data){
-  const md = data.marketData || {};
-  const mEl = $("#market"); mEl.innerHTML="";
+
+/* ---------- summary card + email banner ---------- */
+function marketStrip(el, md, cached){
+  md = md || {};
+  const st = md.stats || {};
+  el.innerHTML = "";
   const items = [
     ["Symbol", md.symbol],
-    ["Price", md.price!=null ? `${md.price} ${md.currency||""}` : "—"],
-    ["Market Cap", md.stats?.marketCap || "—"],
-    ["P/E (TTM)", md.stats?.trailingPE || "—"],
-    ["Fwd P/E", md.stats?.forwardPE || "—"],
-    ["PEG", md.stats?.pegRatio || "—"],
-    ["Div Yield", md.stats?.dividendYield || "—"],
-    ["52W Range", (md.stats?.fiftyTwoWeekLow&&md.stats?.fiftyTwoWeekHigh) ? `${md.stats.fiftyTwoWeekLow} ~ ${md.stats.fiftyTwoWeekHigh}` : "—"],
-    ["1Y Target", md.stats?.oneYearTarget || "—"],
+    ["Price", md.price!=null ? `${md.price} ${md.currency||""}`.trim() : "—"],
+    ["Market Cap", st.marketCap || "—"],
+    ["P/E (TTM)", st.trailingPE || "—"],
+    ["Fwd P/E", st.forwardPE || "—"],
+    ["PEG", st.pegRatio || "—"],
+    ["Div Yield", st.dividendYield || "—"],
+    ["52W Range", (st.fiftyTwoWeekLow&&st.fiftyTwoWeekHigh) ? `${st.fiftyTwoWeekLow} ~ ${st.fiftyTwoWeekHigh}` : "—"],
+    ["1Y Target", st.oneYearTarget || "—"],
     ["Sector", md.profile?.sector || "—"],
   ];
-  items.forEach(([k,v])=>{ const d=document.createElement("div"); d.className="m"; d.innerHTML=`<span>${k}</span><b>${v??"—"}</b>`; mEl.appendChild(d); });
-  if(data.cached){ const c=document.createElement("span"); c.className="cached"; c.textContent="cached"; mEl.appendChild(c); }
+  items.forEach(([k,v])=>{ const d=document.createElement("div"); d.className="m"; d.innerHTML=`<span>${k}</span><b>${v??"—"}</b>`; el.appendChild(d); });
+  if(cached){ const c=document.createElement("span"); c.className="cached"; c.textContent="cached"; el.appendChild(c); }
+}
+function renderSummary(data){
+  const s = data.summary || {};
+  marketStrip($("#summary-market"), data.marketData, data.cached);
+  const lenses = (s.lenses||[]).map(l=>`<div class="lens"><span class="who">${escHtml((l.name||l.id||"").toUpperCase())}</span> · <span class="take">${escHtml(l.oneLiner||"")}</span></div>`).join("");
+  $("#summary-card").innerHTML = `
+    <span class="verdict">${escHtml(s.overallVerdict||"—")}</span>&nbsp;&nbsp;<span style="color:var(--muted);font-size:13px">Composite score</span>
+    <div class="score">${s.overallConviction ?? "—"}<small> / 100</small></div>
+    <div class="oneliner">“${escHtml(s.actionableTakeaway||"")}”</div>
+    <div class="lens-grid">${lenses}</div>`;
+  $("#summary-section").style.display = "block";
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function setBanner(html){ const b = $("#email-banner"); b.innerHTML = html; b.style.display = "block"; }
+function bindViewFull(reportId){
+  const el = document.getElementById("view-full-link") || document.getElementById("view-full-btn");
+  if(!el) return;
+  el.addEventListener("click", async (e)=>{
+    e.preventDefault();
+    try{
+      const r = await api("/api/report?id="+reportId);
+      if(!r.ok){ toast("Report not available"); return; }
+      const data = await r.json();
+      render(data);
+    }catch(err){ toast("Failed to load report"); }
+  });
+}
+function startReportPolling(reportId){
+  if(REPORT_TIMER){ clearInterval(REPORT_TIMER); REPORT_TIMER = null; }
+  if(!reportId) return;
+  const email = ME ? ME.email : "";
+  setBanner(`Full report is being generated, will arrive at <b>${escHtml(email)}</b> shortly.<small>Typically under 2 minutes — the summary above is yours to keep on this page</small>`);
+  let tries = 0;
+  REPORT_TIMER = setInterval(async ()=>{
+    tries++;
+    if(tries > 60){ // 3 分钟上限
+      clearInterval(REPORT_TIMER); REPORT_TIMER = null;
+      setBanner(`Full report is taking longer than usual — it will still arrive at <b>${escHtml(email)}</b>.<small>Please check your inbox (and spam folder) in a few minutes.</small>`);
+      return;
+    }
+    try{
+      const r = await api("/api/report-status?id="+reportId);
+      if(!r.ok) return;
+      const d = await r.json();
+      if(d.status === "sent"){
+        clearInterval(REPORT_TIMER); REPORT_TIMER = null;
+        setBanner(`✓ Full report sent to <b>${escHtml(d.email)}</b> — <a href="#" id="view-full-link">view in-page copy</a><small>Complete four-lens analyses + red-flag tracking + synthesis.</small>`);
+        bindViewFull(reportId);
+      } else if(d.status === "queued"){
+        clearInterval(REPORT_TIMER); REPORT_TIMER = null;
+        setBanner(`✓ Full report is queued and will arrive at <b>${escHtml(d.email)}</b> shortly<small>Delivery can take a few minutes. Meanwhile you can read it right here: <a href="#" id="view-full-link">view in-page copy</a></small>`);
+        bindViewFull(reportId);
+      } else if(d.status === "ready_nochannel"){
+        clearInterval(REPORT_TIMER); REPORT_TIMER = null;
+        setBanner(`✓ Your full report is ready.<small>Email delivery is not configured on this server — read it right here:</small><br/><button id="view-full-btn">View full report</button>`);
+        bindViewFull(reportId);
+      } else if(d.status === "failed"){
+        clearInterval(REPORT_TIMER); REPORT_TIMER = null;
+        setBanner(`Full report is ready, but email delivery failed.<small>${escHtml(d.error||"")}</small><button id="view-full-btn">View full report here</button>`);
+        bindViewFull(reportId);
+      }
+      // "generating" → keep polling
+    }catch(e){ /* transient network error — retry on next tick */ }
+  }, 3000);
+}
+
+/* ---------- full report view ---------- */
+function render(data){
+  marketStrip($("#market"), data.marketData, data.cached);
 
   const cEl = $("#cards"); cEl.innerHTML="";
   (data.analyses||[]).forEach(a=>{
@@ -382,7 +635,7 @@ function render(data){
     <p><b>Consensus:</b> ${s.consensus||""}</p>
     <p><b>Divergence / key risk:</b> ${s.divergence||""}</p>
     <div class="take">Actionable takeaway: ${s.actionableTakeaway||""}</div>`;
-  const sym = md.symbol || data.ticker || "";
+  const sym = data.marketData?.symbol || data.ticker || "";
   $("#report-headline").textContent = sym ? `Four-Lens Verdict · ${sym}` : "Four-Lens Verdict";
   $("#results").style.display="block";
   loadPicks();
@@ -423,7 +676,17 @@ async function loadPicks(){
 $("#save").addEventListener("click", saveCurrent);
 $("#pdf").addEventListener("click", ()=>window.print());
 $("#go").addEventListener("click", analyze);
-$("#ticker").addEventListener("keydown", e=>{ if(e.key==="Enter") analyze(); });
+$("#ticker").addEventListener("input", onTickerInput);
+$("#ticker").addEventListener("keydown", e=>{
+  if(acOpen){
+    if(e.key==="ArrowDown"){ e.preventDefault(); if(acItems.length){ acHot=(acHot+1)%acItems.length; updateAcHot(); } return; }
+    if(e.key==="ArrowUp"){ e.preventDefault(); if(acItems.length){ acHot=(acHot-1+acItems.length)%acItems.length; updateAcHot(); } return; }
+    if(e.key==="Enter"){ e.preventDefault(); if(acHot>=0 && acItems[acHot]) pickAc(acItems[acHot]); else { closeAc(); analyze(); } return; }
+    if(e.key==="Escape"){ e.preventDefault(); closeAc(); return; }
+    if(e.key==="Tab"){ closeAc(); return; }
+  } else if(e.key==="Enter"){ analyze(); }
+});
+$("#ticker").addEventListener("blur", ()=>setTimeout(closeAc, 150));
 $("#tab-signup").addEventListener("click", ()=>setTab("signup"));
 $("#tab-login").addEventListener("click", ()=>setTab("login"));
 $("#m-submit").addEventListener("click", submitAuth);
@@ -442,7 +705,7 @@ document.querySelectorAll(".plan button[data-plan]").forEach(b=>{
   });
 });
 function showActivate(plan){
-  $("#act-plan").textContent = plan==="team" ? "Team" : "Pro";
+  $("#act-plan").textContent = "Pro";
   $("#activate").style.display = "block";
   window.scrollTo({ top: document.body.scrollHeight, behavior:"smooth" });
 }
@@ -459,6 +722,28 @@ $("#act-btn").addEventListener("click", async ()=>{
 
 setTab("signup");
 refreshAuth();
+
+/* ---------- demo mode (?demo=1): static preview of dropdown + summary card for QA/screenshots ---------- */
+if(new URLSearchParams(location.search).get("demo") === "1"){
+  const DEMO_SUMMARY = {
+    ticker:"AAPL", query:"AP",
+    marketData:{ symbol:"AAPL", price:231.78, currency:"USD", stats:{ marketCap:"$3.44T", trailingPE:"32.8", forwardPE:"28.6", pegRatio:"2.3", dividendYield:"0.44%", fiftyTwoWeekLow:"169.21", fiftyTwoWeekHigh:"260.10", oneYearTarget:"$235.00" }, profile:{ sector:"Technology" } },
+    summary:{
+      overallVerdict:"HOLD", overallConviction:81,
+      actionableTakeaway:"A wonderful business at a fair price — moat intact, but the market already knows it. Wait for fat pitches.",
+      lenses:[
+        {id:"buffett",name:"BUFFETT",verdict:"Bullish",oneLiner:"Durable moat, 38% ROIC — owner-earnings yield 4.1% is thin."},
+        {id:"munger",name:"MUNGER",verdict:"Neutral",oneLiner:"Invert: what kills it? Customer concentration risk is real."},
+        {id:"klarman",name:"KLARMAN",verdict:"Bearish",oneLiner:"No margin of safety at 29× FCF — pass or wait."},
+        {id:"marks",name:"MARKS",verdict:"Neutral",oneLiner:"Consensus is bullish; second-level thinking says caution."}
+      ]
+    }
+  };
+  $("#ticker").value = "AP";
+  renderAc(acSearch("AP"), "AP");
+  renderSummary(DEMO_SUMMARY);
+  setBanner(`Full report is being generated, will arrive at <b>you@example.com</b> shortly.<small>Typically under 2 minutes — the summary above is yours to keep on this page</small>`);
+}
 </script>
 </body>
 </html>
