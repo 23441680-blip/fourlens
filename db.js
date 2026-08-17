@@ -136,6 +136,10 @@ export const auth = {
   consumeFree(userId) {
     db.prepare("UPDATE users SET free_used = free_used + 1 WHERE id=?").run(userId);
   },
+  // 邮件列表沉淀（EDM导出用）：所有注册用户 email / 注册时间 / 是否Pro
+  listSubscribers() {
+    return db.prepare("SELECT email, created_at, CASE WHEN pro_status='active' THEN 1 ELSE 0 END AS pro FROM users ORDER BY created_at DESC").all();
+  },
 };
 
 export const portfolio = {
