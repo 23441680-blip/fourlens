@@ -169,6 +169,8 @@ async function synthesize(ticker, analyses) {
 const FREE_LIMIT = 1;
 // Pro 档：每月（自然月）20 次四镜分析
 const PRO_MONTH_LIMIT = 20;
+// 内部测试白名单：不限次数，不计配额
+const UNLIMITED_EMAILS = ["23441680@qq.com"];
 
 // 摘要负载：两段式报告第一段（verdict/总分/四镜各一句话），完整版异步进邮箱
 function summaryPayload(data) {
@@ -226,10 +228,11 @@ app.post("/api/analyze", async (req, res) => {
   const user = auth.getUser((req.headers.authorization || "").replace(/^Bearer\s+/i, ""));
   if (!user) return res.status(401).json({ error: "Sign up / log in to run an analysis", needLogin: true });
   const isPro = user.pro_status === "active";
+  const unlimited = UNLIMITED_EMAILS.includes((user.email || "").toLowerCase());
   if (!API_KEY) return res.status(500).json({ error: "Analysis engine not configured" });
 
-  // Pro 月度配额门禁：当月 ≥ 20 次 → 403 quotaExceeded
-  if (isPro && usage.countMonth(user.id) >= PRO_MONTH_LIMIT) {
+  // Pro 月度配额门禁：当月 ≥ 20 次 → 403 quotaExceeded（白名单不限次）
+  if (!unlimited && isPro && usage.countMonth(user.id) >= PRO_MONTH_LIMIT) {
     return res.status(403).json({
       code: "quotaExceeded",
       error: "Monthly limit reached — your 20 analyses refresh on the 1st of next month",
@@ -243,8 +246,8 @@ app.post("/api/analyze", async (req, res) => {
   }
   const ticker = resolved;
 
-  // 免费额度门禁：非 Pro 且免费次数已用完 → 引导付费
-  if (!isPro && (user.free_used || 0) >= FREE_LIMIT) {
+  // 免费额度门禁：非 Pro 且免费次数已用完 → 引导付费（白名单不限次）
+  if (!unlimited && !isPro && (user.free_used || 0) >= FREE_LIMIT) {
     return res.status(403).json({ code: "freeUsedUp", error: "Your free analysis has been used. Upgrade to Pro for 20 reports per month.", needPro: true });
   }
 
@@ -267,7 +270,7 @@ app.post("/api/analyze", async (req, res) => {
     const data = { ticker, query: rawInput, marketData: market, analyses, synthesized };
     analysisCache.set(key, { ts: Date.now(), data });
     usage.log(user.id, ticker); // 全量记录用量（Pro 月度配额核算依据）
-    if (!isPro) auth.consumeFree(user.id); // 成功生成才扣免费额度
+    if (!isPro && !unlimited) auth.consumeFree(user.id); // 成功生成才扣免费额度（白名单不扣）
     reports.attach(reportId, data);
     finalizeReportAsync(reportId, user, data); // 完整版后台异步 + 邮件，不阻塞摘要返回
     res.json({ ...summaryPayload(data), reportId });
